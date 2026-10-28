@@ -166,6 +166,8 @@ App data location (settings, keys, known_hosts):
 - macOS: `~/Library/Application Support/repodock/`
 - Linux: `~/.config/repodock/`
 
+**Your data is kept across updates.** Every version (installed or `npm run dev`, old or new) uses this same folder, and uninstalling does not delete it. RepoDock also saves a copy of its data file in `backups/` each time it starts (the newest 20 are kept).
+
 ---
 
 ## 🛠 Troubleshooting

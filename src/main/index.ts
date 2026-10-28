@@ -5,6 +5,12 @@ import { installHelper } from './agent/paths'
 import { startBridge, stopBridge } from './agent/bridge'
 import { repairClients } from './agent/clients'
 import { refreshLinks } from './agent/gitlink'
+import { backupData } from './store'
+
+// Pin the data folder. Electron would otherwise name it after "productName" (RepoDock) in installed
+// builds and "name" (repodock) in development; one fixed folder means every version, dev or
+// installed, old or new, reads the same accounts, keys and repos.
+app.setPath('userData', path.join(app.getPath('appData'), 'repodock'))
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -51,6 +57,7 @@ if (process.platform === 'darwin') process.env.PATH = [process.env.PATH, '/opt/h
 app.setAppUserModelId('com.repodock.app')
 
 app.whenReady().then(() => {
+  backupData()
   createWindow()
   app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow())
   // Independent steps: one failing must not keep the others (especially the MCP server) from starting.

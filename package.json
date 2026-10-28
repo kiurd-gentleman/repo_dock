@@ -46,7 +46,8 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "RepoDock-Setup-${version}.${ext}"
+      "artifactName": "RepoDock-Setup-${version}.${ext}",
+      "deleteAppDataOnUninstall": false
     },
     "mac": {
       "target": [

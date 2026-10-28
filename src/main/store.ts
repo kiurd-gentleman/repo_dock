@@ -25,13 +25,43 @@ let cache: Data | null = null
 
 export function load(): Data {
   if (cache) return cache
+  if (!fs.existsSync(file())) return (cache = empty())
   try {
-    const raw = JSON.parse(fs.readFileSync(file(), 'utf8'))
-    cache = { ...empty(), ...raw, agent: { ...empty().agent, ...raw.agent } }
+    cache = parse(fs.readFileSync(file(), 'utf8'))
   } catch {
-    cache = empty()
+    // Never start over silently: keep the unreadable file aside and fall back to the newest backup.
+    fs.copyFileSync(file(), path.join(dataDir(), `repodock.unreadable-${Date.now()}.json`))
+    const latest = listBackups()[0]
+    cache = latest ? parse(fs.readFileSync(latest, 'utf8')) : empty()
   }
   return cache!
+}
+
+function parse(text: string): Data {
+  const raw = JSON.parse(text)
+  return { ...empty(), ...raw, agent: { ...empty().agent, ...raw.agent } }
+}
+
+const backupsDir = (): string => path.join(dataDir(), 'backups')
+const KEEP_BACKUPS = 20
+
+function listBackups(): string[] {
+  if (!fs.existsSync(backupsDir())) return []
+  return fs.readdirSync(backupsDir()).filter((f) => /^repodock-.*\.json$/.test(f)).sort().reverse().map((f) => path.join(backupsDir(), f))
+}
+
+/** Copies the data file into backups/ once per launch and keeps the newest few. */
+export function backupData(): void {
+  try {
+    if (!fs.existsSync(file())) return
+    JSON.parse(fs.readFileSync(file(), 'utf8')) // only back up a readable file
+    fs.mkdirSync(backupsDir(), { recursive: true })
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    fs.copyFileSync(file(), path.join(backupsDir(), `repodock-${stamp}.json`))
+    for (const old of listBackups().slice(KEEP_BACKUPS)) fs.rmSync(old, { force: true })
+  } catch (e) {
+    console.error('[backup]', (e as Error).message)
+  }
 }
 
 export function save(): void {
