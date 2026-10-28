@@ -5,7 +5,7 @@ import type { View } from '../App'
 import { GROUP_COLORS, Modal, useApp } from './ui'
 import logo from '../assets/logo.svg'
 
-export function Sidebar({ view, setView }: { view: View; setView: (v: View) => void }) {
+export function Sidebar({ view, setView, aiPending }: { view: View; setView: (v: View) => void; aiPending: number }) {
   const { state, summaries, act, reload, refreshSummaries, toast } = useApp()
   const [filter, setFilter] = useState('')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -56,6 +56,9 @@ export function Sidebar({ view, setView }: { view: View; setView: (v: View) => v
         <button className={view.kind === 'dashboard' ? 'active' : ''} onClick={() => setView({ kind: 'dashboard' })}>▦ Overview</button>
         <button className={view.kind === 'accounts' ? 'active' : ''} onClick={() => setView({ kind: 'accounts' })}>⚿ Accounts <span className="count">{state.accounts.length}</span></button>
         <button className={view.kind === 'github' ? 'active' : ''} onClick={() => setView({ kind: 'github' })}>☁ GitHub repos</button>
+        <button className={view.kind === 'agents' ? 'active' : ''} onClick={() => setView({ kind: 'agents' })}>
+          ✦ AI agents {aiPending > 0 && <span className="count attention" title="Waiting for your approval">{aiPending}</span>}
+        </button>
       </nav>
       <div className="side-actions">
         <button onClick={addRepo}>+ Add repo</button>

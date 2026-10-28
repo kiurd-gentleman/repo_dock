@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { AppState, RepoSummary } from '../../shared/types'
-import { api } from './api'
+import type { AgentApproval, AppState, RepoSummary } from '../../shared/types'
+import { api, onEvent } from './api'
 import { AppCtx, type Ctx } from './components/ui'
 import { Sidebar } from './components/Sidebar'
 import { Dashboard } from './components/Dashboard'
@@ -8,8 +8,10 @@ import { RepoView } from './components/RepoView'
 import { Accounts } from './components/Accounts'
 import { GitHubRepos } from './components/GitHubRepos'
 import { AlertHost, type AlertItem } from './components/Alert'
+import { Agents } from './components/Agents'
+import { ApprovalHost } from './components/Approval'
 
-export type View = { kind: 'dashboard' } | { kind: 'repo'; id: string } | { kind: 'accounts' } | { kind: 'github' }
+export type View = { kind: 'dashboard' } | { kind: 'repo'; id: string } | { kind: 'accounts' } | { kind: 'github' } | { kind: 'agents' }
 
 export function App() {
   const [state, setState] = useState<AppState>({ accounts: [], groups: [], repos: [] })
@@ -18,6 +20,7 @@ export function App() {
   const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([])
   const [alerts, setAlerts] = useState<AlertItem[]>([])
   const [busy, setBusy] = useState(false)
+  const [approvals, setApprovals] = useState<AgentApproval[]>([])
 
   // Successes are brief toasts; errors need reading, so they open a dialog that stays until dismissed.
   const toast = useCallback((msg: string, kind: 'ok' | 'err' = 'ok') => {
@@ -63,7 +66,15 @@ export function App() {
     // Keep the sidebar's change counts fresh when coming back to the app.
     const onFocus = () => refreshSummaries()
     window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
+    // AI tools act in the background: show their approval requests and keep repo state current.
+    api.agentApprovals().then(setApprovals)
+    const offApprovals = onEvent<AgentApproval[]>('agent:approvals', setApprovals)
+    const offRepos = onEvent<string[]>('repos:changed', (ids) => refreshSummaries(ids))
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      offApprovals()
+      offRepos()
+    }
   }, [reload, refreshSummaries])
 
   const ctx: Ctx = useMemo(() => ({
@@ -77,13 +88,14 @@ export function App() {
   return (
     <AppCtx.Provider value={ctx}>
       <div className="layout">
-        <Sidebar view={view} setView={setView} />
+        <Sidebar view={view} setView={setView} aiPending={approvals.length} />
         <main className="main">
           {view.kind === 'dashboard' && <Dashboard open={(id) => setView({ kind: 'repo', id })} />}
           {view.kind === 'repo' && current && <RepoView key={current.id} repo={current} onRemoved={() => setView({ kind: 'dashboard' })} />}
           {view.kind === 'repo' && !current && <div className="empty">Repository not found</div>}
           {view.kind === 'accounts' && <Accounts />}
           {view.kind === 'github' && <GitHubRepos />}
+          {view.kind === 'agents' && <Agents />}
         </main>
       </div>
       <div className="toasts">
@@ -91,6 +103,7 @@ export function App() {
           <div key={t.id} className="toast" onClick={() => setToasts((x) => x.filter((y) => y.id !== t.id))}>{t.msg}</div>
         ))}
       </div>
+      <ApprovalHost items={approvals} />
       <AlertHost items={alerts} dismiss={dismissAlert} />
     </AppCtx.Provider>
   )

@@ -117,6 +117,21 @@ After adding the account, click **Test SSH** on its card. It should say *"SSH wo
 
 Click a repo to open its tabs: **Changes**, **History**, **Branches & stash**, **Pull requests**, **Issues**, **Actions** and **Settings**. The account shown in the repo header is the one used for fetch, pull and push. Change it there if needed.
 
+### 4. Let your AI tools use RepoDock (MCP server)
+
+RepoDock has a built-in **MCP server**. Open **AI agents** in the sidebar:
+
+1. **Add the MCP server to your AI tools.** Click **Connect** next to Claude Code, Claude Desktop, Cursor, VS Code (Copilot), Windsurf, Codex CLI or Gemini CLI, then restart that tool. For other tools, copy the config shown under **Other MCP tool**.
+2. **Choose what needs your approval.** The choices are before push and pull requests (default), before any change, or never. Force-push always asks. Approval requests pop up in RepoDock with the branch, commits and account. Press Enter to allow or Esc to deny.
+
+Then just ask your AI: *"commit and push my changes"*, *"open a pull request"* or *"is CI passing?"* Every call uses the right GitHub account, and the AI never sees your keys or tokens. Everything is listed under **Activity**.
+
+<details>
+<summary>Advanced: AI tools that run <code>git</code> themselves</summary>
+
+Turn this on for a repo, and any plain `git push` or `git pull` (from a terminal, an IDE or an AI tool without MCP) authenticates as that repo's account too. RepoDock adds one `include` line to the repo's `.git/config` and removes it when you turn the option off.
+</details>
+
 ---
 
 ## 🔒 Security

@@ -1,13 +1,18 @@
 import { dialog, shell } from 'electron'
+import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import type { Account, AppState, AuthMethod, Group, Repo, RepoSummary } from '../shared/types'
+import type { Account, AgentInfo, AgentPolicy, AppState, AuthMethod, Group, Repo, RepoSummary } from '../shared/types'
 import { getToken, load, newId, save, setToken } from './store'
 import * as git from './git'
 import * as ssh from './ssh'
 import { GitHub } from './github'
 import { findRepos } from './scan'
+import * as gitlink from './agent/gitlink'
+import * as agentClients from './agent/clients'
+import * as bridge from './agent/bridge'
+import { helperExe, helperScript, installHelper, mcpEntry } from './agent/paths'
 
 // ---------- helpers ----------
 
@@ -24,7 +29,7 @@ function repo(id: string): Repo {
 }
 
 /** Manual override wins; otherwise match the remote owner against account logins, then their orgs. */
-function detectAccount(r: Repo, owner: string | null): Account | null {
+export function detectAccount(r: Repo, owner: string | null): Account | null {
   const { accounts } = load()
   if (r.accountId) return accounts.find((a) => a.id === r.accountId) ?? null
   if (!owner) return null
@@ -36,7 +41,7 @@ function detectAccount(r: Repo, owner: string | null): Account | null {
   )
 }
 
-async function repoContext(id: string) {
+export async function repoContext(id: string) {
   const r = repo(id)
   const url = await git.remoteUrl(r.path)
   const remote = git.parseRemote(url)
@@ -75,7 +80,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
   return out
 }
 
-async function addRepoPath(p: string, extra: Partial<Repo> = {}): Promise<Repo | null> {
+export async function addRepoPath(p: string, extra: Partial<Repo> = {}): Promise<Repo | null> {
   const top = path.normalize((await git.run(['rev-parse', '--show-toplevel'], { cwd: p })).trim())
   const d = load()
   if (d.repos.some((r) => r.path.toLowerCase() === top.toLowerCase())) return null
@@ -189,6 +194,7 @@ export const handlers = {
     }
     load().accounts.push(a)
     save()
+    gitlink.refreshLinks()
     return a
   },
 
@@ -201,6 +207,7 @@ export const handlers = {
     }
     await refreshProfile(a)
     save()
+    gitlink.refreshLinks()
     return a
   },
 
@@ -245,6 +252,7 @@ export const handlers = {
     d.accounts = d.accounts.filter((x) => x.id !== id)
     d.repos.forEach((r) => r.accountId === id && (r.accountId = null))
     save()
+    await gitlink.refreshLinks()
   },
 
   async pickKeyFile(): Promise<string | null> {
@@ -273,8 +281,10 @@ export const handlers = {
     return { found: paths.length, added }
   },
 
-  removeRepos(ids: string[]): void {
+  async removeRepos(ids: string[]): Promise<void> {
     const d = load()
+    // Leave no RepoDock include behind in repos we stop managing.
+    await Promise.all(d.repos.filter((r) => ids.includes(r.id) && r.gitLinked).map((r) => gitlink.unlink(r).catch(() => {})))
     d.repos = d.repos.filter((r) => !ids.includes(r.id))
     save()
   },
@@ -287,6 +297,7 @@ export const handlers = {
   setRepoAccount(id: string, accountId: string | null): void {
     repo(id).accountId = accountId
     save()
+    gitlink.refreshLinks([id])
   },
 
   createGroup(name: string, color: string): Group {
@@ -386,6 +397,7 @@ export const handlers = {
   setReposAccount(ids: string[], accountId: string | null): void {
     load().repos.forEach((r) => ids.includes(r.id) && (r.accountId = accountId))
     save()
+    gitlink.refreshLinks(ids)
   },
 
   async clone(accountId: string, cloneUrl: string, groupId: string | null): Promise<Repo> {
@@ -503,6 +515,53 @@ export const handlers = {
   async ghDispatch(id: string, workflowId: number, ref: string) {
     const { gh, base } = await ghContext(id)
     return gh.post(`${base}/actions/workflows/${workflowId}/dispatches`, { ref })
+  },
+
+  // ----- AI agents -----
+
+  agentInfo(): AgentInfo {
+    const { policy, rules } = load().agent
+    return { running: bridge.bridgeRunning(), policy, rules, clients: agentClients.listClients(), mcpConfig: mcpEntry() }
+  },
+  agentLog: () => load().agent.log,
+  agentClearLog: () => bridge.clearLog(),
+  agentApprovals: () => bridge.pendingApprovals(),
+  agentAnswer: (id: string, decision: 'once' | 'session' | 'always' | 'deny') => bridge.answer(id, decision),
+  agentSetPolicy(policy: AgentPolicy) {
+    load().agent.policy = policy
+    save()
+  },
+  agentRemoveRule(index: number) {
+    load().agent.rules.splice(index, 1)
+    save()
+  },
+  agentSetClient: (id: string, on: boolean) => agentClients.setClient(id, on),
+  agentSetGitLinked: (ids: string[], on: boolean) => gitlink.setLinked(ids, on),
+  /** Runs the real helper the way an AI tool would, to prove the whole path works. */
+  agentSelfTest(): Promise<{ ok: boolean; error?: string; ms: number }> {
+    const started = Date.now()
+    try {
+      installHelper()
+    } catch (e) {
+      return Promise.resolve({ ok: false, error: (e as Error).message, ms: 0 })
+    }
+    if (!bridge.bridgeRunning()) bridge.startBridge()
+    return new Promise((resolve) => {
+      const child = execFile(
+        helperExe(), [helperScript(), 'selftest'],
+        { env: { ...process.env, ...mcpEntry().env }, windowsHide: true, timeout: 15_000 },
+        (err, stdout) => {
+          try {
+            const r = JSON.parse(String(stdout).trim().split(/\r?\n/).pop() ?? '')
+            resolve({ ok: !!r.ok, error: r.error, ms: Date.now() - started })
+          } catch {
+            const firstError = err ? String(err.message).split(/\r?\n/).find((l) => /Error:/.test(l)) : undefined
+            resolve({ ok: false, error: firstError ?? err?.message ?? 'The helper did not answer', ms: Date.now() - started })
+          }
+        }
+      )
+      child.stdin?.end()
+    })
   },
 
   // ----- shell -----

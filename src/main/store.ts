@@ -2,7 +2,7 @@ import { app, safeStorage } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import type { Account, Group, Repo } from '../shared/types'
+import type { Account, AgentLogEntry, AgentPolicy, AgentRule, Group, Repo } from '../shared/types'
 
 interface Data {
   accounts: Account[]
@@ -10,11 +10,15 @@ interface Data {
   repos: Repo[]
   /** accountId -> token encrypted with the OS keychain (DPAPI on Windows), base64. */
   secrets: Record<string, string>
+  agent: { policy: AgentPolicy; rules: AgentRule[]; log: AgentLogEntry[] }
 }
+
+const empty = (): Data => ({ accounts: [], groups: [], repos: [], secrets: {}, agent: { policy: 'ask-remote', rules: [], log: [] } })
 
 export const dataDir = (): string => app.getPath('userData')
 export const keysDir = (): string => path.join(dataDir(), 'keys')
 export const knownHostsFile = (): string => path.join(dataDir(), 'known_hosts')
+export const agentDir = (): string => path.join(dataDir(), 'agent')
 const file = (): string => path.join(dataDir(), 'repodock.json')
 
 let cache: Data | null = null
@@ -22,9 +26,10 @@ let cache: Data | null = null
 export function load(): Data {
   if (cache) return cache
   try {
-    cache = { accounts: [], groups: [], repos: [], secrets: {}, ...JSON.parse(fs.readFileSync(file(), 'utf8')) }
+    const raw = JSON.parse(fs.readFileSync(file(), 'utf8'))
+    cache = { ...empty(), ...raw, agent: { ...empty().agent, ...raw.agent } }
   } catch {
-    cache = { accounts: [], groups: [], repos: [], secrets: {} }
+    cache = empty()
   }
   return cache!
 }

@@ -34,6 +34,8 @@ export interface Repo {
   /** Manual account override; null means auto-detect from the remote owner. */
   accountId: string | null
   addedAt: number
+  /** Plain `git` commands (terminal, IDEs, AI tools) authenticate through RepoDock. */
+  gitLinked?: boolean
 }
 
 export interface RepoSummary {
@@ -112,4 +114,61 @@ export interface AppState {
   accounts: Account[]
   groups: Group[]
   repos: Repo[]
+}
+
+// ---------- AI agents ----------
+
+/** When AI tools must ask before acting. Force-push and similar always ask. */
+export type AgentPolicy = 'ask-remote' | 'ask-writes' | 'trust'
+
+export interface AgentRule {
+  client: string
+  repoId: string
+  tool: string
+}
+
+export interface AgentLogEntry {
+  id: string
+  time: number
+  client: string
+  repoId: string | null
+  repoName: string | null
+  tool: string
+  summary: string
+  status: 'ok' | 'error' | 'denied' | 'pending'
+  error?: string
+  ms?: number
+}
+
+export interface AgentApproval {
+  id: string
+  client: string
+  repoId: string
+  repoName: string
+  tool: string
+  title: string
+  risk: 'normal' | 'high'
+  accountLabel: string | null
+  details: { label: string; value: string }[]
+  list?: { label: string; items: string[] }
+  createdAt: number
+  timeoutAt: number
+}
+
+export interface AgentClient {
+  id: string
+  name: string
+  detected: boolean
+  connected: boolean
+  configPath: string
+  error?: string
+}
+
+export interface AgentInfo {
+  running: boolean
+  policy: AgentPolicy
+  rules: AgentRule[]
+  clients: AgentClient[]
+  /** MCP server entry, for tools RepoDock can't configure automatically. */
+  mcpConfig: { command: string; args: string[]; env: Record<string, string> }
 }

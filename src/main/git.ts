@@ -83,7 +83,7 @@ export function redact(text: string): string {
  * and don't match the plain https://github.com/ rewrite, so collect their prefixes to
  * rewrite them too and let the selected account authenticate instead.
  */
-async function embeddedCredentialPrefixes(cwd: string): Promise<string[]> {
+export async function embeddedCredentialPrefixes(cwd: string): Promise<string[]> {
   const out = await run(['config', '--get-regexp', String.raw`^remote\..*\.(push)?url$`], { cwd, okCodes: [1] }).catch(() => '')
   const prefixes = new Set<string>()
   for (const m of out.matchAll(/https?:\/\/[^\s/@]+@github\.com\//gi)) prefixes.add(m[0])
