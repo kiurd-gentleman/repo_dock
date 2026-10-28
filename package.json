@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "description": "Desktop manager for many git repos across multiple GitHub accounts",
   "main": "out/main/index.js",
-  "author": "arif@kolpolok.com",
+  "author": {
+    "name": "Imtiaz",
+    "email": "arif@kolpolok.com"
+  },
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
@@ -11,21 +14,78 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
-    "dist": "electron-vite build && electron-builder --win",
-    "icons": "node scripts/make-icons.cjs"
+    "dist": "electron-vite build && electron-builder",
+    "icons": "node scripts/make-icons.cjs",
+    "dist:win": "electron-vite build && electron-builder --win",
+    "dist:mac": "electron-vite build && electron-builder --mac",
+    "dist:linux": "electron-vite build && electron-builder --linux"
   },
   "build": {
     "appId": "com.repodock.app",
     "productName": "RepoDock",
+    "artifactName": "RepoDock-${version}-${os}-${arch}.${ext}",
     "files": [
       "out/**/*",
       "resources/**/*"
     ],
     "directories": {
-      "buildResources": "build"
+      "buildResources": "build",
+      "output": "dist"
     },
+    "publish": null,
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "RepoDock-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.developer-tools",
+      "identity": null
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Development",
+      "maintainer": "Imtiaz <arif@kolpolok.com>",
+      "synopsis": "Manage many git repositories across multiple GitHub accounts"
     }
   },
   "dependencies": {
@@ -44,5 +104,10 @@
     "sharp": "^0.35.5",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"
+  },
+  "homepage": "https://github.com/kiurd-gentleman/repo_dock",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kiurd-gentleman/repo_dock.git"
   }
 }

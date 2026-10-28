@@ -14,7 +14,11 @@ import os from 'node:os'
 import path from 'node:path'
 import { AGENT_TOOLS, SERVER_INSTRUCTIONS } from '../shared/agentTools'
 
-const HOME = process.env.REPODOCK_HOME || path.join(process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'), 'repodock')
+const userConfigDir =
+  process.platform === 'win32' ? (process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'))
+  : process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support')
+  : (process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'))
+const HOME = process.env.REPODOCK_HOME || path.join(userConfigDir, 'repodock')
 const INFO = path.join(HOME, 'agent', 'bridge.json')
 
 interface BridgeInfo {

@@ -6,7 +6,11 @@ import { mcpEntry } from './paths'
 
 const NAME = 'repodock'
 const home = os.homedir()
-const appData = process.env.APPDATA ?? path.join(home, 'AppData', 'Roaming')
+/** Per-user app settings folder: %APPDATA% on Windows, ~/Library/Application Support on macOS, ~/.config on Linux. */
+const appData =
+  process.platform === 'win32' ? (process.env.APPDATA ?? path.join(home, 'AppData', 'Roaming'))
+  : process.platform === 'darwin' ? path.join(home, 'Library', 'Application Support')
+  : (process.env.XDG_CONFIG_HOME ?? path.join(home, '.config'))
 
 interface Target {
   id: string

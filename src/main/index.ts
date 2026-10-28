@@ -44,6 +44,9 @@ app.on('second-instance', () => {
   if (w) (w.isMinimized() && w.restore(), w.show(), w.focus())
 })
 
+// Apps started from Finder get a minimal PATH; add the usual git/ssh locations (Homebrew, MacPorts).
+if (process.platform === 'darwin') process.env.PATH = [process.env.PATH, '/opt/homebrew/bin', '/usr/local/bin', '/opt/local/bin'].filter(Boolean).join(':')
+
 // Needed on Windows for notifications (AI approval requests) to show the app's name.
 app.setAppUserModelId('com.repodock.app')
 

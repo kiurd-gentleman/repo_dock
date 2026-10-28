@@ -9,7 +9,8 @@ const fwd = (p: string): string => p.replace(/\\/g, '/')
  * don't need Node installed. It is copied out of the app bundle to a stable path on every start.
  */
 export const helperScript = (): string => path.join(agentDir(), 'repodock-agent.js')
-export const helperExe = (): string => process.execPath
+// An AppImage runs from a temporary mount that changes every launch; $APPIMAGE is the stable file.
+export const helperExe = (): string => process.env.APPIMAGE || process.execPath
 
 export function installHelper(): void {
   const copy = (src: string, dest: string) => {

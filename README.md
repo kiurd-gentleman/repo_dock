@@ -27,37 +27,51 @@
 
 ## 📦 Installation
 
-### Option 1: Download the installer (Windows)
+RepoDock runs on **Windows**, **macOS** and **Linux**. The only requirement is **Git**:
 
-If a release is published, download `RepoDock Setup x.y.z.exe` from the [Releases](https://github.com/kiurd-gentleman/repo_dock/releases) page and run it.
+| System | Install Git |
+|--------|-------------|
+| Windows | [Git for Windows](https://git-scm.com/download/win). RepoDock also uses its bundled `ssh` and `ssh-keygen`. |
+| macOS | Run `xcode-select --install`, or `brew install git` |
+| Linux | `sudo apt install git openssh-client` (or your distro's equivalent) |
 
-> Windows SmartScreen may warn about an unknown publisher because the app is not code-signed. Click **More info → Run anyway**.
+### Option 1: Download (recommended)
+
+Get the latest version from the **[Releases page](https://github.com/kiurd-gentleman/repo_dock/releases/latest)**:
+
+| System | Download | How to install |
+|--------|----------|----------------|
+| **Windows** 10/11 | `RepoDock-Setup-x.y.z.exe` | Run it and follow the installer. |
+| **macOS** Apple Silicon (M1–M4) | `RepoDock-x.y.z-mac-arm64.dmg` | Open it and drag RepoDock to **Applications**. |
+| **macOS** Intel | `RepoDock-x.y.z-mac-x64.dmg` | Same as above. |
+| **Linux** (any distro) | `RepoDock-x.y.z-linux-x86_64.AppImage` | `chmod +x RepoDock-*.AppImage`, then run it. |
+| **Linux** Debian/Ubuntu | `RepoDock-x.y.z-linux-amd64.deb` | `sudo apt install ./RepoDock-*.deb` |
+
+<details>
+<summary>⚠️ First launch: "unknown publisher" / "app is damaged" / "can't be opened"</summary>
+
+The installers are not code-signed yet, so each system warns once:
+
+- **Windows:** SmartScreen says *"Windows protected your PC"*. Click **More info → Run anyway**.
+- **macOS:** if you see *"RepoDock is damaged"* or *"cannot be opened"*, run this once in Terminal, then open the app again:
+  ```bash
+  xattr -cr /Applications/RepoDock.app
+  ```
+- **Linux (AppImage):** if it doesn't start, install FUSE: `sudo apt install libfuse2`.
+</details>
 
 ### Option 2: Build it yourself
 
-#### 1. Install the prerequisites
-
-| Tool | Version | Download |
-|------|---------|----------|
-| **Git for Windows** | any recent | https://git-scm.com/download/win |
-| **Node.js** | 20.19+ or 22.12+ (LTS recommended) | https://nodejs.org |
-
-> Git for Windows is required. RepoDock uses its `git`, `ssh` and `ssh-keygen`.
-
-Check that both tools work:
-
-```bash
-git --version
-node --version
-```
-
-#### 2. Get the code
+Install **Git** (see above) and **Node.js** 20.19+ or 22.12+ ([nodejs.org](https://nodejs.org)), then:
 
 ```bash
 git clone https://github.com/kiurd-gentleman/repo_dock.git
 cd repo_dock
 npm install
+npm run dev
 ```
+
+> **Windows PowerShell** says *"running scripts is disabled"*? Use `npm.cmd` instead of `npm`, or run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
 
 <details>
 <summary>⚠️ Seeing <code>Electron failed to install correctly</code>?</summary>
@@ -69,19 +83,25 @@ node node_modules/electron/install.js
 ```
 </details>
 
-#### 3. Run it
+To build an installer for the system you're on:
 
 ```bash
-npm run dev
+npm run dist          # current system
+npm run dist:win      # Windows .exe
+npm run dist:mac      # macOS .dmg (must run on a Mac)
+npm run dist:linux    # Linux AppImage + .deb
 ```
 
-#### 4. (Optional) Build a Windows installer
+Installers are written to `dist/`.
+
+### Publishing a release (maintainers)
+
+Push a version tag. GitHub Actions builds Windows, macOS and Linux installers and publishes them as a GitHub Release:
 
 ```bash
-npm run dist
+npm version patch          # bumps package.json and creates the tag, e.g. v0.1.1
+git push --follow-tags
 ```
-
-The installer is written to `dist/RepoDock Setup <version>.exe`. Run it to install RepoDock like any other app, with a Start-menu entry and an uninstaller.
 
 ---
 
@@ -136,12 +156,15 @@ Turn this on for a repo, and any plain `git push` or `git pull` (from a terminal
 
 ## 🔒 Security
 
-- **Tokens** are encrypted with the OS keychain (Windows DPAPI via Electron `safeStorage`) and are never saved as plain text.
-- **SSH private keys** are stored in the app's data folder and are readable only by your Windows user.
-- RepoDock **never modifies** `~/.ssh`, `~/.gitconfig` or a repo's `.git/config`. Authentication is passed to each git command through environment variables only.
+- **Tokens** are encrypted with the OS keychain (DPAPI on Windows, Keychain on macOS, libsecret/kwallet on Linux) and are never saved as plain text.
+- **SSH private keys** are stored in the app's data folder and are readable only by your user account.
+- RepoDock **never modifies** `~/.ssh` or `~/.gitconfig`, and changes a repo's `.git/config` only if you turn on the optional plain-git link. Otherwise authentication is passed to each git command through environment variables only.
 - Tokens embedded in remote URLs (`https://ghp_…@github.com/…`) are hidden in the UI and in error messages.
 
-App data location: `%APPDATA%\repodock\` (settings, keys and known_hosts).
+App data location (settings, keys, known_hosts):
+- Windows: `%APPDATA%\repodock\`
+- macOS: `~/Library/Application Support/repodock/`
+- Linux: `~/.config/repodock/`
 
 ---
 
@@ -154,7 +177,7 @@ App data location: `%APPDATA%\repodock\` (settings, keys and known_hosts).
 | `Permission denied (publickey)` | The key isn't on GitHub, or it belongs to another user. Run **Test SSH** on the account. |
 | `could not read Password for 'https://…'` | The repo is linked to the wrong account, or to none. Pick the right account in the repo header. |
 | `not a git repository` | The folder has no `.git`. Use **Import folder** to scan inside it instead. |
-| The window looks out of date after an update | Press **Ctrl + R** to reload. |
+| The window looks out of date after an update | Press **Ctrl + R** (**⌘ + R** on macOS) to reload. |
 
 ---
 
@@ -166,7 +189,7 @@ App data location: `%APPDATA%\repodock\` (settings, keys and known_hosts).
 | `npm run build` | Build the app into `out/` |
 | `npm start` | Run the built app |
 | `npm run typecheck` | Type-check all TypeScript |
-| `npm run dist` | Build the Windows installer into `dist/` |
+| `npm run dist` | Build installers for the current system into `dist/` (`dist:win`, `dist:mac`, `dist:linux` for a specific one) |
 | `npm run icons` | Regenerate the app icons from `build/icon.svg` |
 
 **Stack:** Electron · React · TypeScript · electron-vite · electron-builder

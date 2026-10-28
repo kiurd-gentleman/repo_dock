@@ -1,0 +1,84 @@
+# Builds RepoDock for Windows, macOS and Linux and publishes a GitHub Release.
+# Trigger: push a tag like v0.1.0 (or run it by hand from the Actions tab).
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win
+          - os: macos-latest
+            target: --mac
+          - os: ubuntu-latest
+            target: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build app
+        run: npx electron-vite build
+
+      - name: Package installers
+        run: npx electron-builder ${{ matrix.target }} --publish never
+        env:
+          # No signing certificates yet: build unsigned installers.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*-mac-*.zip
+            dist/*.AppImage
+            dist/*.deb
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}-dev', github.run_number) }}
+          name: RepoDock ${{ github.ref_type == 'tag' && github.ref_name || format('dev build {0}', github.run_number) }}
+          prerelease: ${{ github.ref_type != 'tag' }}
+          generate_release_notes: true
+          files: installers/*
+          body: |
+            ## Download
+
+            | System | File |
+            |---|---|
+            | **Windows** (10/11, 64-bit) | `RepoDock-Setup-*.exe` |
+            | **macOS** Apple Silicon (M1–M4) | `RepoDock-*-mac-arm64.dmg` |
+            | **macOS** Intel | `RepoDock-*-mac-x64.dmg` |
+            | **Linux** (any distro) | `RepoDock-*-linux-x86_64.AppImage` |
+            | **Linux** Debian / Ubuntu | `RepoDock-*-linux-amd64.deb` |
+
+            Requires **Git** to be installed. See the [README](https://github.com/kiurd-gentleman/repo_dock#-installation) for first-run notes (the installers are not code-signed yet).

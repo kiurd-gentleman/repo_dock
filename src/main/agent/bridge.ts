@@ -227,7 +227,7 @@ export function startBridge(): void {
     secret,
     pid: process.pid,
     // Lets the helper start RepoDock when an AI tool needs it and the app is closed.
-    launch: app.isPackaged ? { command: process.execPath, args: [] as string[] } : null
+    launch: app.isPackaged ? { command: process.env.APPIMAGE || process.execPath, args: [] as string[] } : null
   }
   const infoFile = path.join(agentDir(), 'bridge.json')
   fs.writeFileSync(infoFile, JSON.stringify(info, null, 2))
