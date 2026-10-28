@@ -1,0 +1,48 @@
+{
+  "name": "repodock",
+  "version": "0.1.0",
+  "description": "Desktop manager for many git repos across multiple GitHub accounts",
+  "main": "out/main/index.js",
+  "author": "arif@kolpolok.com",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev --watch",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "dist": "electron-vite build && electron-builder --win",
+    "icons": "node scripts/make-icons.cjs"
+  },
+  "build": {
+    "appId": "com.repodock.app",
+    "productName": "RepoDock",
+    "files": [
+      "out/**/*",
+      "resources/**/*"
+    ],
+    "directories": {
+      "buildResources": "build"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  }
+}
