@@ -1,6 +1,6 @@
 {
   "name": "repodock",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Desktop manager for many git repos across multiple GitHub accounts",
   "main": "out/main/index.js",
   "author": {
