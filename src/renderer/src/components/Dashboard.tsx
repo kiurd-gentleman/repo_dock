@@ -147,6 +147,16 @@ export function Dashboard({ open }: { open: (id: string) => void }) {
     ...state.groups.filter((g) => g.id !== r.groupId).map((g): MenuEntry => ({ label: <><span className="dot" style={{ background: g.color }} /> {g.name}</>, onClick: () => moveTo([r.id], g) })),
     r.groupId && { label: <><span className="dot hollow" /> Ungrouped</>, onClick: () => moveTo([r.id], null) },
     { label: '+ New group…', onClick: () => setNewGroupFor([r.id]) },
+    // Which account fetch / pull / push use. Only repos with a remote need one; the one in use isn't listed again.
+    ...(s?.remoteUrl && (r.accountId || state.accounts.some((a) => a.id !== s.effectiveAccountId)) ? [
+      'sep' as const,
+      { heading: s.effectiveAccountId ? 'Sign in as a different account' : 'Choose the account to sign in with' },
+      ...state.accounts.filter((a) => a.id !== (r.accountId ?? s.effectiveAccountId)).map((a): MenuEntry => ({
+        label: <><AccountBadge account={a} size={16} /> <span className="muted">{a.label}</span></>,
+        onClick: () => setAccount([r.id], a.id)
+      })),
+      r.accountId && { label: 'Auto-detect from the remote', title: 'Let RepoDock pick the account that owns the remote', onClick: () => setAccount([r.id], null) }
+    ] : []),
     'sep',
     { label: 'Open folder', onClick: () => api.openPath(r.path) },
     s?.owner && { label: 'Open on GitHub', onClick: () => api.openExternal(`https://github.com/${s.owner}/${s.repoName}`) },

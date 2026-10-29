@@ -7,6 +7,7 @@ import { repairClients } from './agent/clients'
 import { refreshLinks } from './agent/gitlink'
 import { backupData } from './store'
 import { initUpdater } from './updater'
+import { initialBounds, trackWindow } from './windowState'
 
 // Pin the data folder. Electron would otherwise name it after "productName" (RepoDock) in installed
 // builds and "name" (repodock) in development; one fixed folder means every version, dev or
@@ -14,9 +15,9 @@ import { initUpdater } from './updater'
 app.setPath('userData', path.join(app.getPath('appData'), 'repodock'))
 
 function createWindow(): void {
+  const { bounds, maximized } = initialBounds()
   const win = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    ...bounds,
     minWidth: 960,
     minHeight: 600,
     title: 'RepoDock',
@@ -29,6 +30,8 @@ function createWindow(): void {
       sandbox: true
     }
   })
+  if (maximized) win.maximize()
+  trackWindow(win)
   // Links inside the UI open in the real browser, never inside the app.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) shell.openExternal(url)
