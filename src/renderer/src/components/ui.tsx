@@ -182,3 +182,78 @@ export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: 
 }
 
 export const GROUP_COLORS = ['#5b8def', '#3fb950', '#d29922', '#f778ba', '#a371f7', '#39c5cf', '#f0883e', '#8b949e']
+
+// ---------- resizable panes ----------
+
+const readWidth = (key: string, fallback: number): number => {
+  try {
+    const v = Number(localStorage.getItem('pane:' + key))
+    return Number.isFinite(v) && v > 0 ? v : fallback
+  } catch {
+    return fallback
+  }
+}
+
+/**
+ * Width of a pane the user can drag. Remembered per key in this browser profile.
+ * Returns the width and the props for the drag handle (double-click resets, ← → nudge).
+ */
+export function usePaneWidth(key: string, initial: number, min: number, maxOf: (el: HTMLElement) => number) {
+  const [width, setWidth] = useState(() => readWidth(key, initial))
+  const save = (w: number) => {
+    try {
+      localStorage.setItem('pane:' + key, String(Math.round(w)))
+    } catch {
+      // private mode etc.: the width just isn't remembered
+    }
+  }
+  const clamp = (w: number, el: HTMLElement) => Math.round(Math.max(min, Math.min(w, Math.max(min, maxOf(el)))))
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    const el = e.currentTarget
+    const startX = e.clientX
+    const start = width
+    let last = start
+    el.setPointerCapture(e.pointerId)
+    document.body.classList.add('resizing')
+    const move = (ev: PointerEvent) => setWidth((last = clamp(start + ev.clientX - startX, el)))
+    const up = () => {
+      el.removeEventListener('pointermove', move)
+      el.removeEventListener('pointerup', up)
+      el.removeEventListener('pointercancel', up)
+      document.body.classList.remove('resizing')
+      save(last)
+    }
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerup', up)
+    el.addEventListener('pointercancel', up)
+  }
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    e.preventDefault()
+    const w = clamp(width + (e.key === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 60 : 20), e.currentTarget)
+    setWidth(w)
+    save(w)
+  }
+  const onDoubleClick = () => {
+    setWidth(initial)
+    save(initial)
+  }
+  const handle = {
+    role: 'separator' as const,
+    'aria-orientation': 'vertical' as const,
+    'aria-valuenow': width,
+    tabIndex: 0,
+    title: 'Drag to resize · double-click to reset',
+    className: 'pane-resizer',
+    onPointerDown,
+    onKeyDown,
+    onDoubleClick
+  }
+  return { width, handle }
+}
+
+/** Space the right-hand pane always keeps when the left one is dragged wider. */
+export const leaveForRight = (keep: number) => (el: HTMLElement) => (el.parentElement?.clientWidth ?? 1200) - keep

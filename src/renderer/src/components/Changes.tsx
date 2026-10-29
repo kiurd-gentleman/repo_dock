@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FileChange, Repo, Stash } from '../../../shared/types'
 import { api } from '../api'
-import { Diff, Spinner, ago, fullDate, useApp, useLoad } from './ui'
+import { Diff, Spinner, ago, fullDate, leaveForRight, useApp, usePaneWidth, useLoad } from './ui'
 import { FormDialog } from './GitDialogs'
 import { useMenu, type MenuEntry, type MenuItem } from './menu'
 
@@ -28,6 +28,7 @@ export function Changes({ repo, version, changed, net }: Props) {
   const [msg, setMsg] = useState('')
   const [amend, setAmend] = useState(false)
   const [openMenu, menu] = useMenu()
+  const pane = usePaneWidth('changes', 340, 240, leaveForRight(360))
 
   const files = st?.files ?? []
   const staged = files.filter((f) => f.staged)
@@ -149,7 +150,7 @@ export function Changes({ repo, version, changed, net }: Props) {
   return (
     <div className="split">
       {menu}
-      <div className="split-left">
+      <div className="split-left" style={{ width: pane.width }}>
         <div className="file-section">
           <div className="section-head">
             <span>Staged ({staged.length})</span>
@@ -209,6 +210,7 @@ export function Changes({ repo, version, changed, net }: Props) {
           <div className="hint">Ctrl+Enter to commit</div>
         </div>
       </div>
+      <div {...pane.handle} />
       <div className="split-right">
         {selStash ? (
           <>

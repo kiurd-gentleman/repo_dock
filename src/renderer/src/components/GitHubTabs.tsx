@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Repo } from '../../../shared/types'
 import { api } from '../api'
-import { Modal, Spinner, ago, fullDate, useApp, useLoad } from './ui'
+import { Modal, Spinner, ago, fullDate, useApp, useLoad, leaveForRight, usePaneWidth } from './ui'
 
 type State = 'open' | 'closed' | 'all'
 
@@ -199,6 +199,7 @@ const runIcon = (r: { status: string; conclusion: string | null }) =>
     : <span className="err-text" title={r.conclusion ?? ''}>✕</span>
 
 export function Actions({ repo, branch }: { repo: Repo; branch: string | null }) {
+  const pane = usePaneWidth('actions', 440, 280, leaveForRight(380))
   const { act } = useApp()
   const { data: runs, loading, reload } = useLoad(() => api.ghRuns(repo.id), [repo.id])
   const { data: workflows } = useLoad(() => api.ghWorkflows(repo.id), [repo.id])
@@ -229,7 +230,7 @@ export function Actions({ repo, branch }: { repo: Repo; branch: string | null })
 
   return (
     <div className="split">
-      <div className="split-left wide">
+      <div className="split-left wide" style={{ width: pane.width }}>
         <div className="toolbar compact">
           <button onClick={reload}>↻</button>
           <select value={wf} onChange={(e) => setWf(e.target.value)}>
@@ -252,6 +253,7 @@ export function Actions({ repo, branch }: { repo: Repo; branch: string | null })
           {!loading && !runs?.length && <div className="empty small">No workflow runs</div>}
         </div>
       </div>
+      <div {...pane.handle} />
       <div className="split-right">
         {sel ? (
           <div className="commit-detail">

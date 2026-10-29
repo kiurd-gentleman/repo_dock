@@ -3,7 +3,7 @@ import type { Group, Repo } from '../../../shared/types'
 import { api } from '../api'
 import { updateFound, useUpdateStatus } from './Settings'
 import type { View } from '../App'
-import { GROUP_COLORS, Modal, useApp } from './ui'
+import { GROUP_COLORS, Modal, useApp, usePaneWidth } from './ui'
 import logo from '../assets/logo.svg'
 
 export function Sidebar({ view, setView, aiPending }: { view: View; setView: (v: View) => void; aiPending: number }) {
@@ -12,6 +12,7 @@ export function Sidebar({ view, setView, aiPending }: { view: View; setView: (v:
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [editGroup, setEditGroup] = useState<Group | 'new' | null>(null)
   const [dragOver, setDragOver] = useState<string | null>(null)
+  const pane = usePaneWidth('sidebar', 280, 200, () => Math.min(520, window.innerWidth * 0.45))
   const update = useUpdateStatus()
   const hasUpdate = updateFound(update)
 
@@ -53,7 +54,8 @@ export function Sidebar({ view, setView, aiPending }: { view: View; setView: (v:
   }
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={{ width: pane.width }}>
+      <div {...pane.handle} className="pane-resizer sidebar-resizer" />
       <div className="brand">
         <img src={logo} alt="" width={26} height={26} /> RepoDock
         <button

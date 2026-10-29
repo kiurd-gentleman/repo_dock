@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Commit, CommitDetail, RebaseAction, Repo } from '../../../shared/types'
 import { api } from '../api'
-import { Avatar, Diff, Spinner, ago, fullDate, splitPatch, useApp, useLoad } from './ui'
+import { Avatar, Diff, Spinner, ago, fullDate, leaveForRight, splitPatch, useApp, usePaneWidth, useLoad } from './ui'
 import { useMenu, type MenuEntry, type MenuItem } from './menu'
 import { FormDialog, RebaseDialog, ResetDialog } from './GitDialogs'
 import { RefChips } from './BranchGraph'
@@ -22,6 +22,7 @@ export function History({ repo, version, changed }: { repo: Repo; version: numbe
   const [openMenu, menu] = useMenu()
   const [dialog, setDialog] = useState<ReactNode>(null)
   const close = () => setDialog(null)
+  const pane = usePaneWidth('history', 520, 280, leaveForRight(380))
   // Off: only this branch's own line, where a merged branch is one merge commit. On: every commit reachable from HEAD.
   const [withMerged, setWithMerged] = useState(false)
   const [search, setSearch] = useState('')
@@ -145,7 +146,7 @@ export function History({ repo, version, changed }: { repo: Repo; version: numbe
 
   return (
     <div className="split">
-      <div className="split-left wide history-left">
+      <div className="split-left wide history-left" style={{ width: pane.width }}>
         {unpushed.size > 0 && !query && (
           <div className="hist-note"><span className="push-badge" aria-hidden>↑</span>{unpushed.size} commit{unpushed.size === 1 ? ' is' : 's are'} not pushed yet</div>
         )}
@@ -176,6 +177,7 @@ export function History({ repo, version, changed }: { repo: Repo; version: numbe
           {!loading && !commits.length && <div className="empty small">{query ? 'No commits match' : 'No commits yet'}</div>}
         </div>
       </div>
+      <div {...pane.handle} />
       <div className="split-right">
         <CommitPanel repo={repo} sha={sel} onSelect={setSel} unpushed={sel ? unpushed.has(sel) : false}
           onMenu={(e) => { const c = commits.find((x) => x.sha === sel); if (c) openMenu(e, commitMenu(c)) }} />

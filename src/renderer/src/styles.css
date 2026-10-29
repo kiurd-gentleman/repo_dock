@@ -99,14 +99,14 @@ label.check { color: var(--text); }
 .main { flex: 1; overflow: auto; min-width: 0; }
 
 /* sidebar */
-.sidebar { width: 280px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.sidebar { position: relative; flex-shrink: 0; width: 280px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
 .brand { padding: 14px 16px 10px; font-weight: 700; font-size: 16px; letter-spacing: 0.3px; display: flex; align-items: center; gap: 10px; }
 .brand img { filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--accent) 35%, transparent)); }
 .nav { display: flex; flex-direction: column; padding: 0 8px; }
 .nav button { background: none; border: none; text-align: left; padding: 7px 10px; display: flex; justify-content: space-between; }
 .nav button.active, .nav button:hover { background: var(--panel-2); }
-.side-actions { display: flex; gap: 6px; padding: 10px 8px 6px; }
-.side-actions button { flex: 1; padding: 5px 4px; font-size: 12px; }
+.side-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 8px 6px; }
+.side-actions button { flex: 1 1 auto; min-width: 0; padding: 5px 6px; font-size: 12px; }
 .search { margin: 4px 8px 8px; }
 .repo-list { overflow-y: auto; flex: 1; padding: 0 4px 12px; }
 .settings-btn { margin-left: auto; position: relative; background: none; border: 1px solid transparent; color: var(--muted); font-size: 17px; line-height: 1; padding: 5px 7px; border-radius: 7px; }
@@ -220,8 +220,8 @@ label.check { color: var(--text); }
 .tab-body > * { flex-shrink: 0; }
 
 .tab-body > .split { flex: 1 1 0; min-height: 0; }
-.split { display: flex; gap: 12px; }
-.split-left { width: 340px; display: flex; flex-direction: column; overflow: hidden; }
+.split { display: flex; gap: 0; }
+.split-left { width: 340px; flex-shrink: 0; display: flex; flex-direction: column; overflow: hidden; }
 .split-left.wide { width: 440px; }
 .split-right { flex: 1; overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; min-width: 0; }
 .file-section { overflow-y: auto; margin-bottom: 8px; }
@@ -451,3 +451,11 @@ option { background: var(--panel-2); color: var(--text); }
 .br-actions button { padding: 4px 10px; font-size: 12px; }
 .br-foot { padding: 8px 10px; border-top: 1px solid var(--border); }
 .columns > * { min-width: 0; }
+
+/* Drag handles between panes (sidebar edge, list | details). A 12px target with a thin line in the middle. */
+.pane-resizer { flex: 0 0 12px; position: relative; cursor: col-resize; touch-action: none; outline: none; }
+.pane-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; transform: translateX(-50%); border-radius: 2px; background: transparent; transition: background 0.12s; }
+.pane-resizer:hover::after, .pane-resizer:focus-visible::after, .resizing .pane-resizer::after { background: color-mix(in srgb, var(--accent) 70%, transparent); }
+.sidebar-resizer { position: absolute; top: 0; bottom: 0; right: -6px; width: 12px; z-index: 5; }
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing * { cursor: col-resize !important; }
