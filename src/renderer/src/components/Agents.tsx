@@ -90,18 +90,21 @@ export function Agents() {
         <p className="hint">Click <b>Connect</b>, then restart that AI tool. Now just ask it things like <i>“commit and push my changes”</i> or <i>“open a pull request”</i>.</p>
         <div className="ag-clients">
           {info?.clients.map((c) => (
-            <div key={c.id} className={`ag-client ${c.connected ? 'on' : ''} ${!c.detected && !c.connected ? 'dim' : ''}`}>
+            <div key={c.id} className={`ag-client ${c.connected && c.detected ? 'on' : ''} ${c.connected && !c.detected ? 'stray' : ''} ${!c.detected && !c.connected ? 'dim' : ''}`}>
               <div className="ag-client-logo">{CLIENT_INITIALS[c.id] ?? c.name[0]}</div>
               <div className="ag-client-info">
                 <b>{c.name}</b>
-                <span className={c.error ? 'err-text' : c.connected ? 'ok-text' : 'muted'} title={c.error ?? c.configPath}>
-                  {c.error ? 'Config can’t be edited' : c.connected ? '● Connected' : c.detected ? 'Installed' : 'Not detected'}
+                <span
+                  className={c.error ? 'err-text' : c.connected && !c.detected ? 'warn-text' : c.connected ? 'ok-text' : 'muted'}
+                  title={c.error ?? (c.connected && !c.detected ? `${c.name} isn't installed, but its config file has a RepoDock entry: ${c.configPath}. Click Remove to delete it.` : c.configPath)}
+                >
+                  {c.error ? 'Config can’t be edited' : c.connected && !c.detected ? '⚠ Not installed' : c.connected ? '● Connected' : c.detected ? 'Installed' : 'Not installed'}
                 </span>
               </div>
               {c.connected ? (
-                <button className="small" onClick={() => setClient(c, false)}>Disconnect</button>
+                <button className="small" onClick={() => setClient(c, false)}>{c.detected ? 'Disconnect' : 'Remove'}</button>
               ) : (
-                <button className={`small ${c.detected ? 'primary' : ''}`} disabled={!!c.error} onClick={() => setClient(c, true)}>Connect</button>
+                <button className="small primary" disabled={!!c.error || !c.detected} title={c.detected ? undefined : `Install ${c.name} first`} onClick={() => setClient(c, true)}>Connect</button>
               )}
             </div>
           ))}

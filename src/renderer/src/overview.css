@@ -1,0 +1,99 @@
+/* Overview page. State colours: problem = err, uncommitted = warn, to pull = purple, to push = accent, clean = ok. */
+
+.ov { gap: 0; }
+.s-problem { --c: var(--err); }
+.s-changes { --c: var(--warn); }
+.s-pull { --c: var(--purple); }
+.s-push { --c: var(--accent); }
+.s-clean { --c: var(--ok); }
+.s-loading { --c: var(--border); }
+.pull-text { color: var(--purple-text); }
+.small-text { font-size: 12px; }
+
+.ov-head { display: flex; align-items: flex-end; gap: 20px; justify-content: space-between; margin-bottom: 14px; }
+.ov-head h2 { font-size: 22px; letter-spacing: -0.2px; }
+.ov-summary { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.ov-summary b { color: var(--text); font-size: 15px; }
+.ov-head-actions { display: flex; gap: 8px; }
+
+/* Health strip: every repo is one block, most urgent first. */
+.ov-health { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 14px 10px; margin-bottom: 12px; }
+.ov-strip { display: flex; gap: 2px; height: 30px; }
+.ov-tick {
+  flex: 1 1 0; min-width: 3px; height: 100%; padding: 0; border: none; border-radius: 3px;
+  background: var(--c); opacity: 0.85; cursor: pointer; transition: transform 0.12s, opacity 0.12s;
+}
+.ov-tick:first-child { border-radius: 6px 3px 3px 6px; }
+.ov-tick:last-child { border-radius: 3px 6px 6px 3px; }
+.ov-tick:hover, .ov-tick:focus-visible { opacity: 1; transform: scaleY(1.18); outline: none; }
+.ov-tick.dim { opacity: 0.18; }
+.ov-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.ov-chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px 4px 9px; border-radius: 999px; background: transparent; color: var(--text-2); }
+.ov-chip b { color: var(--text); font-variant-numeric: tabular-nums; }
+.ov-chip:hover:not(:disabled) { border-color: var(--c); }
+.ov-chip.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); color: var(--text); }
+.ov-chip:disabled { opacity: 0.4; }
+.ov-swatch { width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
+
+.ov-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0 10px; }
+.ov-search { width: 280px; max-width: 100%; }
+.ov .bulk-bar { margin: 0 0 10px; }
+
+/* Table */
+.ov-table-wrap { flex: 1; }
+/* Fixed layout: columns share the width by percentage and long text ends in an ellipsis,
+   so the table never overflows and never leaves an empty band, at any window size. */
+.ov-table { table-layout: fixed; }
+.ov-table th.ov-check { width: 36px; }
+.ov-col-name { width: 24%; }
+.ov-col-branch { width: 13%; }
+.ov-col-wt { width: 17%; }
+.ov-col-remote { width: 11%; }
+.ov-col-account { width: 15%; }
+.ov-table td { overflow: hidden; text-overflow: ellipsis; }
+.ov-table th { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.ov-table td { vertical-align: middle; white-space: nowrap; padding-top: 9px; padding-bottom: 9px; }
+.ov-check { width: 34px; position: relative; }
+.ov-rail { position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--c); }
+.ov-rail.s-clean { opacity: 0.35; }
+.ov-name a, .ov-name .sub { display: block; overflow: hidden; text-overflow: ellipsis; }
+.ov-name a { font-weight: 600; font-size: 13.5px; color: var(--text); }
+.ov-name a:hover { color: var(--accent); }
+.ov-branch { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; padding: 1px 8px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--border); font-size: 12px; }
+.ov-wt, .ov-sync { display: inline-flex; flex-wrap: wrap; gap: 0 10px; max-width: 100%; white-space: nowrap; }
+.ov-table td > .ellipsis { display: inline-block; max-width: 100%; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; }
+.ov-wt span:not(.err-text):not(.muted) { color: var(--warn); }
+/* Takes whatever width is left; long messages end in an ellipsis. */
+/* Last commit takes whatever width is left. */
+.ov-commit-fill .ellipsis, .ov-commit-fill .sub { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ov-section td { padding: 16px 10px 6px !important; background: transparent !important; border-bottom: 1px solid var(--border); cursor: default; }
+.ov-section td > * { vertical-align: middle; }
+.ov-section .dot { margin-right: 8px; }
+.ov-section b { font-size: 13px; margin-right: 10px; }
+.ov-mini { display: inline-flex; width: 120px; height: 6px; gap: 2px; margin-left: 12px; vertical-align: middle; }
+.ov-mini i { display: block; height: 100%; border-radius: 3px; background: var(--c); min-width: 4px; }
+.ov-table tbody:first-of-type .ov-section td { padding-top: 8px !important; }
+
+/* Quick actions float over the end of the row on hover/focus, so they never take a column. */
+.ov-table .ov-actions { width: 0; padding: 0 !important; position: relative; overflow: visible; border-bottom-color: var(--border); }
+.ov-actions-float {
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: none; gap: 4px; padding: 4px 8px 4px 28px;
+  background: linear-gradient(to right, transparent, var(--row-bg, var(--bg)) 24px);
+}
+.ov-row { --row-bg: var(--bg); }
+.ov-row:hover { --row-bg: color-mix(in srgb, var(--text) 2.8%, var(--bg)); }
+.ov-row.sel { --row-bg: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
+.ov-row:hover .ov-actions-float, .ov-actions:focus-within .ov-actions-float { display: flex; }
+
+/* Fewer columns on medium windows; the details are a click away. */
+@media (max-width: 1280px) { .ov-col-commit { display: none; } }
+@media (max-width: 1080px) { .ov-col-account { display: none; } }
+.icon-btn { padding: 3px 8px; }
+
+.ov-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 48px 20px; text-align: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ov-tick { transition: none; }
+  .ov-tick:hover { transform: none; }
+}

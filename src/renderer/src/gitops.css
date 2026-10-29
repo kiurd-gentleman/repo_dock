@@ -4,6 +4,7 @@
 .menu .menu-heading { padding: 6px 8px 4px; font-size: 11px; color: var(--muted); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu .menu-heading + hr { margin-top: 2px; }
 .menu-hint { font-size: 11px; color: var(--muted); }
+.ctx-menu button > .grow { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .menu button:disabled { opacity: 0.4; }
 .menu button.danger-item { color: var(--err); }
 .menu button.danger-item:hover { background: color-mix(in srgb, var(--err) 14%, transparent); }

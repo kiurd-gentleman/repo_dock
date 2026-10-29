@@ -15,7 +15,7 @@ const appData =
 interface Target {
   id: string
   name: string
-  /** Folder whose presence means the tool is installed. */
+  /** The tool's own folder. It counts as installed only if the tool put something there (see installed()). */
   detect: string
   file: string
   format: 'json-mcpServers' | 'json-servers' | 'toml-codex'
@@ -30,6 +30,25 @@ const TARGETS: Target[] = [
   { id: 'codex', name: 'Codex CLI', detect: path.join(home, '.codex'), file: path.join(home, '.codex', 'config.toml'), format: 'toml-codex' },
   { id: 'gemini', name: 'Gemini CLI', detect: path.join(home, '.gemini'), file: path.join(home, '.gemini', 'settings.json'), format: 'json-mcpServers' }
 ]
+
+/** Files RepoDock itself may have written into a tool's folder. */
+const ours = (t: Target): Set<string> => {
+  const base = path.basename(t.file)
+  return new Set([base, base + '.repodock-backup', base + '.repodock-tmp'])
+}
+
+/**
+ * The folder alone isn't proof: older RepoDock versions created it when you clicked Connect.
+ * Installed means the folder holds something RepoDock didn't write (the tool's own settings, cache, …).
+ */
+function installed(t: Target): boolean {
+  try {
+    const mine = path.dirname(t.file) === t.detect ? ours(t) : new Set<string>()
+    return fs.readdirSync(t.detect).some((f) => !mine.has(f))
+  } catch {
+    return false
+  }
+}
 
 function target(id: string): Target {
   const t = TARGETS.find((x) => x.id === id)
@@ -85,6 +104,7 @@ function write(t: Target, on: boolean): void {
     const cur = fs.existsSync(t.file) ? fs.readFileSync(t.file, 'utf8') : ''
     let next = cur.replace(CODEX_BLOCK, '').replace(/\n{3,}/g, '\n\n')
     if (on) next = (next.trimEnd() ? next.trimEnd() + '\n\n' : '') + codexBlock()
+    if (!on && !next.trim()) return removeOwnFile(t)
     writeFile(t.file, next)
     return
   }
@@ -93,22 +113,46 @@ function write(t: Target, on: boolean): void {
   j[key] = j[key] ?? {}
   if (on) j[key][NAME] = t.format === 'json-servers' ? { type: 'stdio', ...mcpEntry() } : mcpEntry()
   else delete j[key][NAME]
+  if (!on && !Object.keys(j[key]).length && Object.keys(j).length === 1) return removeOwnFile(t)
   writeFile(t.file, JSON.stringify(j, null, 2) + '\n')
+}
+
+/**
+ * Disconnecting left nothing but an empty shell. If RepoDock created that file (no backup of an
+ * original exists), delete it, and the tool's folder too when RepoDock created that as well.
+ */
+function removeOwnFile(t: Target): void {
+  const backup = t.file + '.repodock-backup'
+  if (fs.existsSync(backup)) {
+    writeFile(t.file, t.format === 'toml-codex' ? '' : '{}\n')
+    return
+  }
+  fs.rmSync(t.file, { force: true })
+  for (let dir = path.dirname(t.file); dir.startsWith(t.detect) && dir.length >= t.detect.length; dir = path.dirname(dir)) {
+    try {
+      if (fs.readdirSync(dir).length) break
+      fs.rmdirSync(dir)
+    } catch {
+      break
+    }
+  }
 }
 
 export function listClients(): AgentClient[] {
   return TARGETS.map((t) => {
     try {
       const cmd = configuredCommand(t)
-      return { id: t.id, name: t.name, detected: fs.existsSync(t.detect), connected: cmd !== null, configPath: t.file }
+      return { id: t.id, name: t.name, detected: installed(t), connected: cmd !== null, configPath: t.file }
     } catch (e) {
-      return { id: t.id, name: t.name, detected: fs.existsSync(t.detect), connected: false, configPath: t.file, error: (e as Error).message }
+      return { id: t.id, name: t.name, detected: installed(t), connected: false, configPath: t.file, error: (e as Error).message }
     }
   })
 }
 
 export function setClient(id: string, on: boolean): void {
-  write(target(id), on)
+  const t = target(id)
+  if (on && !installed(t)) throw new Error(`${t.name} doesn't seem to be installed on this PC, so there's nothing to connect. Install it first, or use “Other MCP tool” to copy the config by hand.`)
+  write(t, on)
 }
 
 /** If RepoDock moved (update, reinstall, dev vs installed), point already-connected tools at the new location. */
