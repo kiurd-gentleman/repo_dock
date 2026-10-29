@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FileChange, Repo } from '../../../shared/types'
 import { api } from '../api'
 import { Diff, Spinner, useApp, useLoad } from './ui'
+import { useMenu, type MenuEntry, type MenuItem } from './menu'
 
 const LABEL: Record<string, string> = { M: 'modified', A: 'added', D: 'deleted', R: 'renamed', C: 'copied', T: 'type changed', U: 'conflict', '?': 'untracked' }
 
@@ -18,6 +19,7 @@ export function Changes({ repo, version, changed, net }: Props) {
   const [sel, setSel] = useState<{ path: string; staged: boolean } | null>(null)
   const [msg, setMsg] = useState('')
   const [amend, setAmend] = useState(false)
+  const [openMenu, menu] = useMenu()
 
   const files = st?.files ?? []
   const staged = files.filter((f) => f.staged)
@@ -62,15 +64,66 @@ export function Changes({ repo, version, changed, net }: Props) {
     run(() => api.discard(repo.id, list.map((f) => ({ path: f.path, untracked: f.untracked }))), 'Discarded')
   }
 
+  const full = (p: string) => `${repo.path}/${p}`.replace(/\\/g, '/')
+  const resolve = (files: string[], how: 'ours' | 'theirs' | 'resolved') =>
+    run(() => api.resolveConflict(repo.id, files, how), how === 'resolved' ? 'Marked as resolved' : `Kept ${how === 'ours' ? 'our' : 'their'} version`)
+  const ignore = (pattern: string) => run(() => api.ignorePath(repo.id, pattern), `Added ${pattern} to .gitignore`)
+
+  const fileMenu = (f: FileChange, isStaged: boolean): MenuEntry[] => {
+    const ext = f.path.match(/\.[^./]+$/)?.[0]
+    const dir = f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/') + 1) : null
+    return [
+      { heading: f.path },
+      ...(f.conflicted ? [
+        { label: 'Use ours', hint: 'current branch', onClick: () => resolve([f.path], 'ours') },
+        { label: 'Use theirs', hint: 'incoming', onClick: () => resolve([f.path], 'theirs') },
+        { label: 'Mark as resolved', hint: 'after editing', onClick: () => resolve([f.path], 'resolved') },
+        'sep' as const
+      ] : []),
+      !f.conflicted && (isStaged
+        ? { label: 'Unstage', onClick: () => run(() => api.unstage(repo.id, [f.path])) }
+        : { label: 'Stage', onClick: () => run(() => api.stage(repo.id, [f.path])) }),
+      !isStaged && !f.conflicted && { label: 'Discard changes…', danger: true, onClick: () => discard([f]) },
+      'sep',
+      f.untracked && { label: 'Ignore this file', onClick: () => ignore(f.path) },
+      f.untracked && ext && { label: `Ignore all ${ext} files`, onClick: () => ignore(`*${ext}`) },
+      f.untracked && dir && { label: `Ignore folder ${dir}`, onClick: () => ignore(dir) },
+      'sep',
+      { label: 'Open file', onClick: () => api.openPath(full(f.path)) },
+      { label: 'Show in folder', onClick: () => api.showInFolder(full(f.path)) },
+      { label: 'Copy path', onClick: () => navigator.clipboard.writeText(f.path) },
+      { label: 'Copy full path', onClick: () => navigator.clipboard.writeText(full(f.path)) }
+    ]
+  }
+
+  const conflicted = files.filter((f) => f.conflicted)
+  const moreMenu = (e: React.MouseEvent) => openMenu(e, [
+    conflicted.length > 0 && { label: `Use ours for all ${conflicted.length} conflicts`, onClick: () => resolve(conflicted.map((f) => f.path), 'ours') },
+    conflicted.length > 0 && { label: `Use theirs for all ${conflicted.length} conflicts`, onClick: () => resolve(conflicted.map((f) => f.path), 'theirs') },
+    'sep',
+    { label: 'Stash all changes', onClick: () => run(() => api.stashSave(repo.id, ''), 'Changes stashed') },
+    { label: 'Undo last commit', hint: 'keeps changes', onClick: () => confirm('Undo the last commit? Its changes come back as staged.') && run(() => api.undoLastCommit(repo.id), 'Commit undone') },
+    'sep',
+    { label: 'Remove untracked files…', danger: true, onClick: () => confirm('Delete every untracked file and folder (not ignored ones)? This cannot be undone.') && run(() => api.cleanUntracked(repo.id, false), 'Untracked files removed') },
+    { label: 'Remove untracked + ignored files…', danger: true, title: 'Also deletes build output, node_modules, .env files…', onClick: () => confirm('Delete every untracked AND ignored file (build output, node_modules, .env…)? This cannot be undone.') && run(() => api.cleanUntracked(repo.id, true), 'Cleaned') },
+    { label: 'Discard ALL changes…', danger: true, onClick: () => confirm('Throw away every staged and unstaged change to tracked files? Untracked files stay. This cannot be undone.') && run(() => api.discardAll(repo.id), 'All changes discarded') }
+  ])
+
   const row = (f: FileChange, isStaged: boolean) => {
     const code = f.conflicted ? 'U' : isStaged ? f.index : f.untracked ? '?' : f.worktree
     const active = sel?.path === f.path && sel.staged === isStaged
     return (
-      <div key={(isStaged ? 's:' : 'u:') + f.path} className={`file ${active ? 'active' : ''}`} onClick={() => setSel({ path: f.path, staged: isStaged })}>
+      <div key={(isStaged ? 's:' : 'u:') + f.path} className={`file ${active ? 'active' : ''}`} onClick={() => setSel({ path: f.path, staged: isStaged })} onContextMenu={(e) => openMenu(e, fileMenu(f, isStaged))}>
         <span className={`code c-${code}`} title={LABEL[code] ?? code}>{code}</span>
         <span className="path" title={f.origPath ? `${f.origPath} → ${f.path}` : f.path}>{f.path}</span>
         <span className="file-actions">
-          {isStaged
+          {f.conflicted
+            ? <>
+                <button className="icon small" title="Use ours (current branch)" onClick={(e) => (e.stopPropagation(), resolve([f.path], 'ours'))}>◧</button>
+                <button className="icon small" title="Use theirs (incoming)" onClick={(e) => (e.stopPropagation(), resolve([f.path], 'theirs'))}>◨</button>
+                <button className="icon small" title="Mark as resolved" onClick={(e) => (e.stopPropagation(), resolve([f.path], 'resolved'))}>✓</button>
+              </>
+            : isStaged
             ? <button className="icon small" title="Unstage" onClick={(e) => (e.stopPropagation(), run(() => api.unstage(repo.id, [f.path])))}>−</button>
             : <>
                 <button className="icon small" title="Discard" onClick={(e) => (e.stopPropagation(), discard([f]))}>↺</button>
@@ -83,6 +136,7 @@ export function Changes({ repo, version, changed, net }: Props) {
 
   return (
     <div className="split">
+      {menu}
       <div className="split-left">
         <div className="file-section">
           <div className="section-head">
@@ -94,6 +148,7 @@ export function Changes({ repo, version, changed, net }: Props) {
         <div className="file-section">
           <div className="section-head">
             <span>Changes ({unstaged.length})</span>
+            <button className="link" onClick={moreMenu} title="More actions">⋯ More</button>
             {unstaged.length > 0 && <>
               <button className="link" onClick={() => discard(unstaged.filter((f) => !f.conflicted))}>Discard all</button>
               <button className="link" onClick={() => run(() => api.stageAll(repo.id))}>Stage all</button>

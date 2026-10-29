@@ -5,13 +5,14 @@ import { AppCtx, type Ctx } from './components/ui'
 import { Sidebar } from './components/Sidebar'
 import { Dashboard } from './components/Dashboard'
 import { RepoView } from './components/RepoView'
+import { Settings } from './components/Settings'
 import { Accounts } from './components/Accounts'
 import { GitHubRepos } from './components/GitHubRepos'
 import { AlertHost, type AlertItem } from './components/Alert'
 import { Agents } from './components/Agents'
 import { ApprovalHost } from './components/Approval'
 
-export type View = { kind: 'dashboard' } | { kind: 'repo'; id: string } | { kind: 'accounts' } | { kind: 'github' } | { kind: 'agents' }
+export type View = { kind: 'dashboard' } | { kind: 'repo'; id: string } | { kind: 'accounts' } | { kind: 'github' } | { kind: 'agents' } | { kind: 'settings' }
 
 export function App() {
   const [state, setState] = useState<AppState>({ accounts: [], groups: [], repos: [] })
@@ -96,6 +97,7 @@ export function App() {
           {view.kind === 'accounts' && <Accounts />}
           {view.kind === 'github' && <GitHubRepos />}
           {view.kind === 'agents' && <Agents />}
+          {view.kind === 'settings' && <Settings />}
         </main>
       </div>
       <div className="toasts">

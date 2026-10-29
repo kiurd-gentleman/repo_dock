@@ -1,11 +1,12 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import path from 'node:path'
-import { handlers } from './handlers'
+import { applyTheme, handlers, themeBackground } from './handlers'
 import { installHelper } from './agent/paths'
 import { startBridge, stopBridge } from './agent/bridge'
 import { repairClients } from './agent/clients'
 import { refreshLinks } from './agent/gitlink'
 import { backupData } from './store'
+import { initUpdater } from './updater'
 
 // Pin the data folder. Electron would otherwise name it after "productName" (RepoDock) in installed
 // builds and "name" (repodock) in development; one fixed folder means every version, dev or
@@ -19,7 +20,7 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 600,
     title: 'RepoDock',
-    backgroundColor: '#0f1115',
+    backgroundColor: themeBackground(),
     autoHideMenuBar: true,
     icon: path.join(__dirname, '../../resources/icon.png'),
     webPreferences: {
@@ -58,7 +59,9 @@ app.setAppUserModelId('com.repodock.app')
 
 app.whenReady().then(() => {
   backupData()
+  applyTheme()
   createWindow()
+  initUpdater()
   app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow())
   // Independent steps: one failing must not keep the others (especially the MCP server) from starting.
   const step = (name: string, fn: () => unknown) => {

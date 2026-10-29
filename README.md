@@ -60,6 +60,8 @@ The installers are not code-signed yet, so each system warns once:
 - **Linux (AppImage):** if it doesn't start, install FUSE: `sudo apt install libfuse2`.
 </details>
 
+**Updates.** RepoDock checks GitHub for a new version on startup and every few hours. When one is out, the box at the bottom of the sidebar says so: click **Update now** and it downloads, installs and restarts by itself. You can also click **⟳ Check** at any time. Your data is kept. On macOS the installers aren't signed yet, so **Download** opens the release page instead.
+
 ### Option 2: Build it yourself
 
 Install **Git** (see above) and **Node.js** 20.19+ or 22.12+ ([nodejs.org](https://nodejs.org)), then:

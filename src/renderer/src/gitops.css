@@ -1,0 +1,73 @@
+/* Context menus, git dialogs, the operation banner and the Tags & remotes tab. */
+
+.ctx-menu { min-width: 230px; max-height: min(560px, calc(100vh - 16px)); }
+.menu .menu-heading { padding: 6px 8px 4px; font-size: 11px; color: var(--muted); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu .menu-heading + hr { margin-top: 2px; }
+.menu-hint { font-size: 11px; color: var(--muted); }
+.menu button:disabled { opacity: 0.4; }
+.menu button.danger-item { color: var(--err); }
+.menu button.danger-item:hover { background: color-mix(in srgb, var(--err) 14%, transparent); }
+
+.split-btn { display: inline-flex; }
+.split-btn > button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.split-btn > button:last-child { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: none; padding: 5px 7px; font-size: 10px; }
+
+button.danger.solid { background: var(--err); border-color: var(--err); color: #fff; }
+.link.danger-link { color: var(--err); margin-left: auto; }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.br-actions.always { opacity: 1; }
+
+/* "⋯ Actions" on the commit details card */
+.commit-more { flex-shrink: 0; font-size: 12px; }
+
+/* merge / rebase / cherry-pick / revert in progress */
+.op-banner {
+  display: flex; align-items: center; gap: 12px; margin: 0 0 10px; padding: 10px 14px; border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel)); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.op-banner.conflict { background: color-mix(in srgb, var(--warn) 10%, var(--panel)); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+.op-banner.detached { background: color-mix(in srgb, var(--purple) 8%, var(--panel)); border-color: color-mix(in srgb, var(--purple) 40%, transparent); }
+.op-banner .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.op-icon { font-size: 18px; width: 22px; text-align: center; }
+.op-banner.conflict .op-icon { color: var(--warn); }
+
+/* dialogs */
+.dlg-intro { color: var(--text-2); margin-bottom: 12px; line-height: 1.5; }
+.dlg-check { margin: 4px 0 12px; }
+.warn-box { background: color-mix(in srgb, var(--warn) 12%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; line-height: 1.45; }
+.choice-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.choice { flex-direction: row; align-items: flex-start; gap: 10px; margin: 0; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; color: var(--text); }
+.choice input { margin-top: 3px; }
+.choice > span { display: flex; flex-direction: column; gap: 2px; }
+.choice .sub { color: var(--muted); font-size: 12px; }
+.choice.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.choice.danger.sel { border-color: var(--err); background: color-mix(in srgb, var(--err) 8%, transparent); }
+
+/* rewrite history */
+.rb-list { display: flex; flex-direction: column; gap: 4px; max-height: 52vh; overflow-y: auto; margin-bottom: 10px; padding-right: 4px; }
+.rb-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-2); }
+.rb-row.focus { border-color: var(--accent); }
+.rb-row.dragging { opacity: 0.5; }
+.rb-row.a-drop .rb-subject { text-decoration: line-through; color: var(--muted); }
+.rb-row.a-drop { border-color: color-mix(in srgb, var(--err) 45%, transparent); }
+.rb-row.a-squash, .rb-row.a-fixup { margin-bottom: -2px; border-bottom-style: dashed; border-color: color-mix(in srgb, var(--purple) 50%, transparent); }
+.rb-row.a-reword { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.rb-grip { cursor: grab; color: var(--faint); padding-top: 5px; user-select: none; }
+.rb-arrows { display: flex; flex-direction: column; }
+.rb-arrows button { padding: 0 4px; font-size: 9px; line-height: 1.3; }
+.rb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.rb-subject { padding-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rb-subject .pill { margin-left: 6px; }
+.rb-main textarea { font-size: 12px; }
+.rb-row select { width: 130px; flex-shrink: 0; }
+
+/* Tags & remotes tab */
+.tool-body { padding: 12px 14px; }
+.tool-body .hint { margin-top: 0; }
+.tool-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.tool-row:last-of-type { border-bottom: none; }
+.tool-row .sub { color: var(--muted); font-size: 12px; }
+.tool-out { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; max-height: 220px; overflow: auto; white-space: pre-wrap; margin: 4px 0 0; }
+.br-head .primary.small { margin-left: auto; }
+
+.stash-diff { max-height: 65vh; overflow: auto; }

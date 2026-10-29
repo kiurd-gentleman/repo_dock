@@ -32,7 +32,14 @@
       "buildResources": "build",
       "output": "dist"
     },
-    "publish": null,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "kiurd-gentleman",
+        "repo": "repo_dock",
+        "releaseType": "release"
+      }
+    ],
     "win": {
       "target": [
         {
@@ -90,6 +97,7 @@
     }
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

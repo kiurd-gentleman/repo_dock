@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Commit, CommitDetail, Repo } from '../../../shared/types'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import type { Commit, CommitDetail, RebaseAction, Repo } from '../../../shared/types'
 import { api } from '../api'
 import { Avatar, Diff, Spinner, ago, fullDate, splitPatch, useApp, useLoad } from './ui'
+import { useMenu, type MenuEntry, type MenuItem } from './menu'
+import { FormDialog, RebaseDialog, ResetDialog } from './GitDialogs'
 
 const PAGE = 150
 const ROW_H = 52
@@ -88,8 +90,20 @@ function RefChips({ refs }: { refs: string }) {
   )
 }
 
-export function History({ repo, version }: { repo: Repo; version: number }) {
-  const { toast } = useApp()
+/** Tag names and the HEAD branch decorating a commit (from %D). */
+const refInfo = (refs: string) => {
+  const parts = refs ? refs.split(', ') : []
+  return {
+    tags: parts.filter((r) => r.startsWith('tag: ')).map((r) => r.slice(5)),
+    isHead: parts.some((r) => r === 'HEAD' || r.startsWith('HEAD -> '))
+  }
+}
+
+export function History({ repo, version, changed }: { repo: Repo; version: number; changed: () => Promise<void> }) {
+  const { toast, act, summaries } = useApp()
+  const [openMenu, menu] = useMenu()
+  const [dialog, setDialog] = useState<ReactNode>(null)
+  const close = () => setDialog(null)
   const [all, setAll] = useState(false)
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
@@ -120,6 +134,66 @@ export function History({ repo, version }: { repo: Repo; version: number }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repo.id, all, query, version])
 
+  const s = summaries[repo.id]
+  const branch = s?.branch ?? null
+  const ghUrl = s?.owner ? `https://github.com/${s.owner}/${s.repoName}` : null
+  const headSha = commits.find((c) => refInfo(c.refs).isHead)?.sha
+
+  const run = async (fn: () => Promise<unknown>, ok: string) => {
+    const r = await act(fn, ok)
+    await changed()
+    return r
+  }
+  const copy = (text: string, what: string) => navigator.clipboard.writeText(text).then(() => toast(`${what} copied`))
+  const rewrite = (c: Commit, preset?: RebaseAction) =>
+    setDialog(<RebaseDialog repo={repo} from={c.sha} focus={c.sha} preset={preset} unpushed={unpushed} onClose={close} done={changed} />)
+
+  const commitMenu = (c: Commit): MenuEntry[] => {
+    const { tags } = refInfo(c.refs)
+    const isHead = c.sha === headSha
+    const pushedNote = unpushed.has(c.sha) ? undefined : 'Already pushed: you will need to force push'
+    return [
+      { heading: `${c.shortSha} · ${c.subject.slice(0, 40)}${c.subject.length > 40 ? '…' : ''}` },
+      { label: 'Checkout commit', hint: 'detached', onClick: () => confirm(`Check out ${c.shortSha}? You'll leave ${branch ?? 'the current branch'} and be on no branch until you switch back or create one.`) && run(() => api.checkoutCommit(repo.id, c.sha), `Checked out ${c.shortSha}`) },
+      { label: 'Reset to commit…', disabled: isHead, onClick: () => setDialog(<ResetDialog repo={repo} commit={c} branch={branch} onClose={close} done={changed} />) },
+      isHead && { label: 'Undo commit', hint: 'keeps changes', title: pushedNote, onClick: () => confirm(`Undo “${c.subject}”? Its changes go back to staged.${pushedNote ? '\n\n' + pushedNote + '.' : ''}`) && run(() => api.undoLastCommit(repo.id), 'Commit undone') },
+      'sep',
+      { label: 'Edit message…', title: pushedNote, onClick: () => isHead ? editHeadMessage(c) : rewrite(c, 'reword') },
+      { label: 'Reorder commit…', title: pushedNote, onClick: () => rewrite(c) },
+      { label: 'Squash into previous…', disabled: c.parents.length === 0, title: pushedNote, onClick: () => rewrite(c, 'squash') },
+      { label: 'Drop commit…', danger: true, title: pushedNote, onClick: () => rewrite(c, 'drop') },
+      { label: 'Revert changes in commit', title: 'Adds a new commit that undoes this one', onClick: () => run(() => api.revertCommit(repo.id, c.sha), `Reverted ${c.shortSha}`) },
+      'sep',
+      { label: 'Create branch from commit…', onClick: () => setDialog(
+        <FormDialog title="Create branch" intro={<>New branch at <code>{c.shortSha}</code></>} submit="Create branch" onClose={close}
+          fields={[{ key: 'name', label: 'Branch name', placeholder: 'feature/my-change' }, { key: 'checkout', label: 'Switch to it now', checkbox: true, initial: '1' }]}
+          onSubmit={(v) => run(() => api.createBranchAt(repo.id, v.name.trim(), c.sha, v.checkout === '1'), `Created ${v.name.trim()}`)} />) },
+      { label: 'Create tag…', onClick: () => setDialog(
+        <FormDialog title="Create tag" intro={<>Tag <code>{c.shortSha}</code> “{c.subject}”</>} submit="Create tag" onClose={close}
+          fields={[{ key: 'name', label: 'Tag name', placeholder: 'v1.0.0' }, { key: 'message', label: 'Message', optional: true, multiline: true, hint: 'With a message it becomes an annotated tag (recommended for releases).' }, { key: 'push', label: 'Push the tag to origin', checkbox: true }]}
+          onSubmit={async (v) => {
+            const name = v.name.trim()
+            const ok = await run(() => api.createTag(repo.id, name, c.sha, v.message), `Tagged ${name}`)
+            if (ok !== undefined && v.push === '1') await run(() => api.pushTag(repo.id, name), `Pushed tag ${name}`)
+            return ok
+          }} />) },
+      ...tags.map((tag): MenuItem => ({ label: `Delete tag ${tag}`, danger: true, onClick: () => confirm(`Delete local tag ${tag}? (The remote copy, if any, stays. Remove it from the Tags & remotes tab.)`) && run(() => api.deleteTag(repo.id, tag), `Deleted tag ${tag}`) })),
+      { label: 'Cherry-pick commit', disabled: isHead, title: `Apply this commit on top of ${branch ?? 'HEAD'}`, onClick: () => run(() => api.cherryPick(repo.id, c.sha), `Cherry-picked ${c.shortSha}`) },
+      'sep',
+      { label: 'Copy SHA', onClick: () => copy(c.sha, 'Commit id') },
+      { label: 'Copy short SHA', onClick: () => copy(c.shortSha, 'Short id') },
+      { label: tags.length ? `Copy tag ${tags[0]}` : 'Copy tag', disabled: !tags.length, onClick: () => copy(tags[0], 'Tag') },
+      { label: 'Copy message', onClick: () => copy(c.subject, 'Message') },
+      { label: 'View on GitHub', disabled: !ghUrl || unpushed.has(c.sha), title: unpushed.has(c.sha) ? 'Not pushed yet' : undefined, onClick: () => api.openExternal(`${ghUrl}/commit/${c.sha}`) }
+    ]
+  }
+
+  const editHeadMessage = (c: Commit) => setDialog(
+    <FormDialog title="Edit commit message" submit="Save message" onClose={close}
+      fields={[{ key: 'message', label: 'Message', initial: c.subject, multiline: true }]}
+      onSubmit={(v) => run(() => api.amendMessage(repo.id, v.message), 'Message updated')} />
+  )
+
   // A graph only makes sense for an unfiltered, connected history.
   const graph = useMemo(() => (query ? null : buildGraph(commits)), [commits, query])
   const graphWidth = graph ? Math.min(Math.max(1, ...graph.map((r) => r.width)), 12) : 0
@@ -147,7 +221,7 @@ export function History({ repo, version }: { repo: Repo; version: number }) {
         </div>
         <div className="commit-list graph-list" ref={listRef} tabIndex={0} onKeyDown={onKey}>
           {commits.map((c, i) => (
-            <div key={c.sha} data-sha={c.sha} className={`commit-row ${sel === c.sha ? 'active' : ''}`} style={{ height: ROW_H }} onClick={() => setSel(c.sha)}>
+            <div key={c.sha} data-sha={c.sha} className={`commit-row ${sel === c.sha ? 'active' : ''}`} style={{ height: ROW_H }} onClick={() => setSel(c.sha)} onContextMenu={(e) => (setSel(c.sha), openMenu(e, commitMenu(c)))}>
               {graph && <GraphCell row={graph[i]} width={graphWidth} />}
               <Avatar name={c.author} email={c.email} />
               <div className="commit-main">
@@ -168,13 +242,16 @@ export function History({ repo, version }: { repo: Repo; version: number }) {
         </div>
       </div>
       <div className="split-right">
-        <CommitPanel repo={repo} sha={sel} onSelect={setSel} unpushed={sel ? unpushed.has(sel) : false} />
+        <CommitPanel repo={repo} sha={sel} onSelect={setSel} unpushed={sel ? unpushed.has(sel) : false}
+          onMenu={(e) => { const c = commits.find((x) => x.sha === sel); if (c) openMenu(e, commitMenu(c)) }} />
       </div>
+      {menu}
+      {dialog}
     </div>
   )
 }
 
-function CommitPanel({ repo, sha, onSelect, unpushed }: { repo: Repo; sha: string | null; onSelect: (s: string) => void; unpushed: boolean }) {
+function CommitPanel({ repo, sha, onSelect, unpushed, onMenu }: { repo: Repo; sha: string | null; onSelect: (s: string) => void; unpushed: boolean; onMenu: (e: React.MouseEvent) => void }) {
   const { toast } = useApp()
   const { data: d, loading } = useLoad(async () => (sha ? api.showCommit(repo.id, sha) : null), [repo.id, sha])
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -199,6 +276,7 @@ function CommitPanel({ repo, sha, onSelect, unpushed }: { repo: Repo; sha: strin
       <div className="commit-card">
         <div className="commit-title">
           <h3>{d.subject}</h3>
+          <button className="commit-more" onClick={onMenu} title="Commit actions (or right-click a commit)">⋯ Actions</button>
           <div className="chips"><RefChips refs={d.refs} />{unpushed && <span className="unpushed">↑ not pushed</span>}</div>
         </div>
         {body && <pre className="body">{body}</pre>}

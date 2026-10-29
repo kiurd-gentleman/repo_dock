@@ -105,9 +105,84 @@ export interface Branch {
   track: string
 }
 
+/** A multi-step git operation that stopped half-way (usually on a conflict). */
+export type RepoOperation = 'merge' | 'rebase' | 'cherry-pick' | 'revert'
+
+export interface RepoState {
+  operation: RepoOperation | null
+  /** Short description such as "rebasing feature onto main (3/7)". */
+  detail: string
+  conflicted: number
+  /** Commit HEAD points at when it isn't on a branch. */
+  detachedAt: string | null
+}
+
+export interface Tag {
+  name: string
+  sha: string
+  date: number
+  /** Annotation message; empty for lightweight tags. */
+  message: string
+  annotated: boolean
+}
+
+export interface Remote {
+  name: string
+  fetchUrl: string
+  pushUrl: string
+}
+
+export type RebaseAction = 'pick' | 'reword' | 'squash' | 'fixup' | 'drop'
+
+export interface RebaseStep {
+  sha: string
+  action: RebaseAction
+  /** New message for reword, or for the combined commit when squashing. */
+  message?: string
+}
+
+export interface RepoIdentity {
+  name: string
+  email: string
+  /** Values git falls back to when the repo sets none. */
+  globalName: string
+  globalEmail: string
+}
+
 export interface Stash {
   ref: string
   message: string
+}
+
+/** App colour theme; 'system' follows the OS light/dark setting. */
+export type ThemeSetting = 'system' | 'light' | 'dark'
+
+export interface UpdateStatus {
+  state: 'idle' | 'unsupported' | 'checking' | 'latest' | 'available' | 'downloading' | 'ready' | 'error'
+  /** Running version. */
+  current: string
+  /** Newer version on GitHub Releases, once found. */
+  version?: string
+  percent?: number
+  checkedAt?: number
+  message?: string
+  /** False in development and on macOS (unsigned): there “update” means opening the download page. */
+  autoInstall: boolean
+}
+
+export interface AppInfo {
+  version: string
+  electron: string
+  chrome: string
+  node: string
+  platform: string
+  arch: string
+  packaged: boolean
+  /** "git version 2.47.0.windows.1", or null when git isn't found. */
+  git: string | null
+  dataDir: string
+  backupsDir: string
+  backups: { file: string; date: number; size: number }[]
 }
 
 export interface AppState {

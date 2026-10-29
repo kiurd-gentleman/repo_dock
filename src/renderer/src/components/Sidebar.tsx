@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Group, Repo } from '../../../shared/types'
 import { api } from '../api'
+import { updateFound, useUpdateStatus } from './Settings'
 import type { View } from '../App'
 import { GROUP_COLORS, Modal, useApp } from './ui'
 import logo from '../assets/logo.svg'
@@ -11,6 +12,8 @@ export function Sidebar({ view, setView, aiPending }: { view: View; setView: (v:
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [editGroup, setEditGroup] = useState<Group | 'new' | null>(null)
   const [dragOver, setDragOver] = useState<string | null>(null)
+  const update = useUpdateStatus()
+  const hasUpdate = updateFound(update)
 
   const match = (r: Repo) => {
     const s = summaries[r.id]
@@ -51,7 +54,17 @@ export function Sidebar({ view, setView, aiPending }: { view: View; setView: (v:
 
   return (
     <aside className="sidebar">
-      <div className="brand"><img src={logo} alt="" width={26} height={26} /> RepoDock</div>
+      <div className="brand">
+        <img src={logo} alt="" width={26} height={26} /> RepoDock
+        <button
+          className={`settings-btn ${view.kind === 'settings' ? 'active' : ''}`}
+          onClick={() => setView({ kind: 'settings' })}
+          title={hasUpdate ? `Settings · version ${update?.version ?? ''} is available` : 'Settings'}
+          aria-label="Settings"
+        >
+          ⚙{hasUpdate && <span className="settings-dot" />}
+        </button>
+      </div>
       <nav className="nav">
         <button className={view.kind === 'dashboard' ? 'active' : ''} onClick={() => setView({ kind: 'dashboard' })}>▦ Overview</button>
         <button className={view.kind === 'accounts' ? 'active' : ''} onClick={() => setView({ kind: 'accounts' })}>⚿ Accounts <span className="count">{state.accounts.length}</span></button>

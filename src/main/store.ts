@@ -2,7 +2,7 @@ import { app, safeStorage } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
-import type { Account, AgentLogEntry, AgentPolicy, AgentRule, Group, Repo } from '../shared/types'
+import type { Account, AgentLogEntry, AgentPolicy, AgentRule, Group, Repo, ThemeSetting } from '../shared/types'
 
 interface Data {
   accounts: Account[]
@@ -11,9 +11,10 @@ interface Data {
   /** accountId -> token encrypted with the OS keychain (DPAPI on Windows), base64. */
   secrets: Record<string, string>
   agent: { policy: AgentPolicy; rules: AgentRule[]; log: AgentLogEntry[] }
+  theme: ThemeSetting
 }
 
-const empty = (): Data => ({ accounts: [], groups: [], repos: [], secrets: {}, agent: { policy: 'ask-remote', rules: [], log: [] } })
+const empty = (): Data => ({ accounts: [], groups: [], repos: [], secrets: {}, agent: { policy: 'ask-remote', rules: [], log: [] }, theme: 'system' })
 
 export const dataDir = (): string => app.getPath('userData')
 export const keysDir = (): string => path.join(dataDir(), 'keys')
@@ -42,25 +43,27 @@ function parse(text: string): Data {
   return { ...empty(), ...raw, agent: { ...empty().agent, ...raw.agent } }
 }
 
-const backupsDir = (): string => path.join(dataDir(), 'backups')
+export const backupsDir = (): string => path.join(dataDir(), 'backups')
 const KEEP_BACKUPS = 20
 
-function listBackups(): string[] {
+export function listBackups(): string[] {
   if (!fs.existsSync(backupsDir())) return []
   return fs.readdirSync(backupsDir()).filter((f) => /^repodock-.*\.json$/.test(f)).sort().reverse().map((f) => path.join(backupsDir(), f))
 }
 
-/** Copies the data file into backups/ once per launch and keeps the newest few. */
-export function backupData(): void {
+/** Copies the data file into backups/ (on every launch, or on demand) and keeps the newest few. Returns true when a copy was written. */
+export function backupData(): boolean {
   try {
-    if (!fs.existsSync(file())) return
+    if (!fs.existsSync(file())) return false
     JSON.parse(fs.readFileSync(file(), 'utf8')) // only back up a readable file
     fs.mkdirSync(backupsDir(), { recursive: true })
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
     fs.copyFileSync(file(), path.join(backupsDir(), `repodock-${stamp}.json`))
     for (const old of listBackups().slice(KEEP_BACKUPS)) fs.rmSync(old, { force: true })
+    return true
   } catch (e) {
     console.error('[backup]', (e as Error).message)
+    return false
   }
 }
 

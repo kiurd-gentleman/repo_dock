@@ -9,6 +9,8 @@ export interface RunOptions {
   account?: Account | null
   /** Exit codes that are not treated as failure. */
   okCodes?: number[]
+  /** Extra environment for this command (e.g. GIT_SEQUENCE_EDITOR for a scripted rebase). */
+  env?: NodeJS.ProcessEnv
 }
 
 const fwd = (p: string): string => p.replace(/\\/g, '/')
@@ -46,7 +48,8 @@ export function sshArgs(keyPath: string): string[] {
  * on the fly so the same repo works whether its remote is https or ssh.
  */
 export function authEnv(account: Account | null | undefined, embeddedPrefixes: string[] = []): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' }
+  // GIT_EDITOR=true: revert, cherry-pick, merge and rebase --continue keep git's default message instead of waiting for an editor.
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', GIT_EDITOR: 'true' }
   if (!account) return env
   const cfg: [string, string][] = [['credential.helper', '']]
   if (account.authMethod === 'token') {
@@ -92,7 +95,7 @@ export async function embeddedCredentialPrefixes(cwd: string): Promise<string[]>
 
 export async function run(args: string[], opts: RunOptions = {}): Promise<string> {
   const embedded = opts.account && opts.cwd ? await embeddedCredentialPrefixes(opts.cwd) : []
-  const env = authEnv(opts.account, embedded)
+  const env = { ...authEnv(opts.account, embedded), ...opts.env }
   return new Promise((resolve, reject) => {
     const child = spawn('git', args, { cwd: opts.cwd, env, windowsHide: true })
     const out: Buffer[] = []

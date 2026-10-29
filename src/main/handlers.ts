@@ -1,10 +1,12 @@
-import { dialog, shell } from 'electron'
+import { app, BrowserWindow, dialog, nativeTheme, shell } from 'electron'
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import type { Account, AgentInfo, AgentPolicy, AppState, AuthMethod, Group, Repo, RepoSummary } from '../shared/types'
-import { getToken, load, newId, save, setToken } from './store'
+import type { Account, AgentInfo, AgentPolicy, AppInfo, AppState, AuthMethod, Group, RebaseStep, Repo, RepoSummary, ThemeSetting } from '../shared/types'
+import * as updater from './updater'
+import * as gitops from './gitops'
+import { backupData, backupsDir, dataDir, getToken, listBackups, load, newId, save, setToken } from './store'
 import * as git from './git'
 import * as ssh from './ssh'
 import { GitHub } from './github'
@@ -59,6 +61,16 @@ async function ghContext(id: string) {
 const gitOn = async (id: string, args: string[]) => {
   const ctx = await repoContext(id)
   return git.run(args, { cwd: ctx.repo.path, account: ctx.account })
+}
+
+function safeUrl(url: string): string {
+  if (!url.trim() || url.trim().startsWith('-')) throw new Error('Invalid remote URL')
+  return url.trim()
+}
+
+function safeSha(sha: string): string {
+  if (!/^[0-9a-f]{4,40}$/i.test(sha)) throw new Error('Invalid commit id')
+  return sha
 }
 
 function safeRef(name: string): string {
@@ -130,9 +142,52 @@ async function uploadKey(a: Account): Promise<void> {
   }
 }
 
+/** Window background while the page loads, so there is no flash of the wrong colour. */
+export const themeBackground = (): string => (nativeTheme.shouldUseDarkColors ? '#0f1115' : '#f6f8fa')
+
+/** Drives prefers-color-scheme in the UI plus the native frame, menus and scrollbars. */
+export function applyTheme(theme: ThemeSetting = load().theme): void {
+  nativeTheme.themeSource = theme
+  for (const w of BrowserWindow.getAllWindows()) w.setBackgroundColor(themeBackground())
+}
+
 // ---------- handlers (every function here is callable from the renderer) ----------
 
 export const handlers = {
+  updateStatus: () => updater.updateStatus(),
+  checkForUpdates: () => updater.checkForUpdates(),
+  installUpdate: () => updater.installUpdate(),
+
+  async appInfo(): Promise<AppInfo> {
+    const gitVersion = await git.run(['--version']).then((s) => s.trim()).catch(() => null)
+    return {
+      version: app.getVersion(),
+      electron: process.versions.electron,
+      chrome: process.versions.chrome,
+      node: process.versions.node,
+      platform: process.platform,
+      arch: process.arch,
+      packaged: app.isPackaged,
+      git: gitVersion,
+      dataDir: dataDir(),
+      backupsDir: backupsDir(),
+      backups: listBackups().map((file) => {
+        const st = fs.statSync(file)
+        return { file, date: st.mtimeMs, size: st.size }
+      })
+    }
+  },
+  backupNow() {
+    if (!backupData()) throw new Error('Nothing to back up yet, or the data file could not be read.')
+  },
+
+  getTheme: (): ThemeSetting => load().theme,
+  setTheme(theme: ThemeSetting) {
+    load().theme = theme
+    save()
+    applyTheme(theme)
+  },
+
   state(): AppState {
     const { accounts, groups, repos } = load()
     return { accounts, groups, repos }
@@ -366,7 +421,8 @@ export const handlers = {
     const [remote, ...rest] = name.split('/')
     return gitOn(id, ['push', safeRef(remote), '--delete', safeRef(rest.join('/'))])
   },
-  merge: (id: string, name: string) => gitOn(id, ['merge', '--no-edit', safeRef(name)]),
+  merge: (id: string, name: string, mode: 'merge' | 'no-ff' | 'squash' | 'ff-only' = 'merge') =>
+    gitOn(id, ['merge', '--no-edit', ...(mode === 'merge' ? [] : [`--${mode}`]), safeRef(name)]),
   abortMerge: (id: string) => gitOn(id, ['merge', '--abort']),
 
   stashSave: (id: string, message: string) => gitOn(id, ['stash', 'push', '-u', ...(message ? ['-m', message] : [])]),
@@ -374,8 +430,98 @@ export const handlers = {
   stashApply: (id: string, ref: string) => gitOn(id, ['stash', 'apply', safeRef(ref)]),
   stashDrop: (id: string, ref: string) => gitOn(id, ['stash', 'drop', safeRef(ref)]),
 
+  // ----- everything else git can do -----
+
+  repoState: async (id: string) => gitops.repoState(repo(id).path),
+  /** Continue / skip / abort whatever merge, rebase, cherry-pick or revert stopped half-way. */
+  async operation(id: string, what: 'continue' | 'skip' | 'abort') {
+    const { operation } = await gitops.repoState(repo(id).path)
+    if (!operation) throw new Error('Nothing is in progress')
+    if (operation === 'merge') return gitOn(id, what === 'continue' ? ['commit', '--no-edit'] : what === 'abort' ? ['merge', '--abort'] : ['reset', '--merge'])
+    return gitOn(id, [operation, `--${what}`])
+  },
+  async resolveConflict(id: string, files: string[], how: 'ours' | 'theirs' | 'resolved') {
+    if (how !== 'resolved') await gitOn(id, ['checkout', `--${how}`, '--', ...files])
+    return gitOn(id, ['add', '--', ...files])
+  },
+  ignorePath(id: string, pattern: string) {
+    const file = path.join(repo(id).path, '.gitignore')
+    const cur = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
+    if (cur.split(/\r?\n/).includes(pattern)) return
+    fs.writeFileSync(file, cur + (cur && !cur.endsWith('\n') ? '\n' : '') + pattern + '\n')
+  },
+  cleanUntracked: (id: string, ignoredToo: boolean) => gitOn(id, ['clean', '-fd', ...(ignoredToo ? ['-x'] : [])]),
+  discardAll: (id: string) => gitOn(id, ['reset', '--hard', '-q']),
+
+  // commits
+  checkoutCommit: (id: string, sha: string) => gitOn(id, ['switch', '--detach', safeSha(sha)]),
+  resetTo: (id: string, sha: string, mode: 'soft' | 'mixed' | 'hard') => gitOn(id, ['reset', `--${mode}`, safeSha(sha)]),
+  amendMessage(id: string, message: string) {
+    if (!message.trim()) throw new Error('Commit message is empty')
+    return gitOn(id, ['commit', '--amend', '--only', '--allow-empty', '-m', message])
+  },
+  undoLastCommit: (id: string) => gitOn(id, ['reset', '--soft', 'HEAD~1']),
+  async revertCommit(id: string, sha: string) {
+    const parents = (await gitOn(id, ['rev-list', '--parents', '-n1', safeSha(sha)])).trim().split(' ').length - 1
+    return gitOn(id, ['revert', '--no-edit', ...(parents > 1 ? ['-m', '1'] : []), sha])
+  },
+  async cherryPick(id: string, sha: string) {
+    const parents = (await gitOn(id, ['rev-list', '--parents', '-n1', safeSha(sha)])).trim().split(' ').length - 1
+    return gitOn(id, ['cherry-pick', ...(parents > 1 ? ['-m', '1'] : []), sha])
+  },
+  createBranchAt: (id: string, name: string, sha: string, checkout: boolean) =>
+    gitOn(id, checkout ? ['switch', '-c', safeRef(name), safeSha(sha)] : ['branch', safeRef(name), safeSha(sha)]),
+  rebasePlan: async (id: string, sha: string) => gitops.rebasePlan(repo(id).path, safeSha(sha)),
+  async rebaseRun(id: string, from: string, steps: RebaseStep[]) {
+    const ctx = await repoContext(id)
+    return gitops.rebaseRun(ctx.repo.path, ctx.account, from, steps)
+  },
+
+  // tags
+  tags: async (id: string) => gitops.tags(repo(id).path),
+  createTag: (id: string, name: string, sha: string, message: string) =>
+    gitOn(id, ['tag', ...(message.trim() ? ['-a', '-m', message] : []), safeRef(name), sha === 'HEAD' ? sha : safeSha(sha)]),
+  deleteTag: (id: string, name: string) => gitOn(id, ['tag', '-d', safeRef(name)]),
+  pushTag: (id: string, name: string, remote = 'origin') => gitOn(id, ['push', safeRef(remote), `refs/tags/${safeRef(name)}`]),
+  pushAllTags: (id: string, remote = 'origin') => gitOn(id, ['push', safeRef(remote), '--tags']),
+  deleteRemoteTag: (id: string, name: string, remote = 'origin') => gitOn(id, ['push', safeRef(remote), '--delete', `refs/tags/${safeRef(name)}`]),
+
+  // branches
+  renameBranch: (id: string, from: string, to: string) => gitOn(id, ['branch', '-m', safeRef(from), safeRef(to)]),
+  setUpstream: (id: string, branch: string, upstream: string | null) =>
+    gitOn(id, upstream ? ['branch', `--set-upstream-to=${safeRef(upstream)}`, safeRef(branch)] : ['branch', '--unset-upstream', safeRef(branch)]),
+  rebaseOnto: (id: string, name: string) => gitOn(id, ['rebase', '--autostash', safeRef(name)]),
+  pushBranch: (id: string, name: string, remote = 'origin') => gitOn(id, ['push', '-u', safeRef(remote), `${safeRef(name)}:${name}`]),
+
+  // stash
+  stashBranch: (id: string, ref: string, name: string) => gitOn(id, ['stash', 'branch', safeRef(name), safeRef(ref)]),
+  stashClear: (id: string) => gitOn(id, ['stash', 'clear']),
+  stashShow: (id: string, ref: string) => gitOn(id, ['stash', 'show', '-p', '--include-untracked', '--no-color', safeRef(ref)]),
+
+  // remotes
+  remotes: async (id: string) => gitops.remotes(repo(id).path),
+  addRemote: (id: string, name: string, url: string) => gitOn(id, ['remote', 'add', safeRef(name), safeUrl(url)]),
+  removeRemote: (id: string, name: string) => gitOn(id, ['remote', 'remove', safeRef(name)]),
+  renameRemote: (id: string, from: string, to: string) => gitOn(id, ['remote', 'rename', safeRef(from), safeRef(to)]),
+  setRemoteUrl: (id: string, name: string, url: string) => gitOn(id, ['remote', 'set-url', safeRef(name), safeUrl(url)]),
+  fetchRemote: (id: string, name: string) => gitOn(id, ['fetch', '--prune', '--tags', safeRef(name)]),
+
+  // identity + maintenance
+  identity: async (id: string) => gitops.identity(repo(id).path),
+  async setIdentity(id: string, name: string, email: string) {
+    for (const [key, value] of [['user.name', name], ['user.email', email]]) {
+      if (value.trim()) await gitOn(id, ['config', '--local', key, value.trim()])
+      else await git.run(['config', '--local', '--unset', key], { cwd: repo(id).path, okCodes: [5] })
+    }
+  },
+  async maintenance(id: string, task: 'gc' | 'prune' | 'fsck' | 'size') {
+    const args = { gc: ['gc', '--prune=now'], prune: ['remote', 'prune', 'origin'], fsck: ['fsck', '--no-progress'], size: ['count-objects', '-vH'] }[task]
+    return (await gitOn(id, args)).trim() || 'Done, nothing to report.'
+  },
+
   fetch: (id: string) => gitOn(id, ['fetch', '--all', '--prune']),
-  pull: (id: string) => gitOn(id, ['pull', '--no-edit']),
+  pull: (id: string, mode: 'merge' | 'rebase' | 'ff-only' = 'merge') =>
+    gitOn(id, ['pull', '--no-edit', mode === 'rebase' ? '--rebase' : mode === 'ff-only' ? '--ff-only' : '--no-rebase']),
   async push(id: string, opts: { force?: boolean } = {}) {
     const st = await git.status(repo(id).path)
     const args = ['push', ...(opts.force ? ['--force-with-lease'] : [])]
