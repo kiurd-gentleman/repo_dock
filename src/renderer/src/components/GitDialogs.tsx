@@ -195,8 +195,8 @@ export function RebaseDialog({ repo, from, focus, preset, unpushed, onClose, don
             >
               <span className="rb-grip" title="Drag to reorder">⋮⋮</span>
               <div className="rb-arrows">
-                <button className="icon small" disabled={i === 0} onClick={() => move(i, i - 1)} title="Move up (newer)">▲</button>
-                <button className="icon small" disabled={i === rows.length - 1} onClick={() => move(i, i + 1)} title="Move down (older)">▼</button>
+                <button className="icon small" style={i === 0 ? { visibility: 'hidden' } : undefined} onClick={() => move(i, i - 1)} title="Move up (newer)">▲</button>
+                <button className="icon small" style={i === rows.length - 1 ? { visibility: 'hidden' } : undefined} onClick={() => move(i, i + 1)} title="Move down (older)">▼</button>
               </div>
               <div className="rb-main">
                 <div className="rb-subject"><code>{r.c.shortSha}</code> {r.c.subject}{!unpushed.has(r.c.sha) && <span className="pill" title="Already on the remote">pushed</span>}</div>
@@ -210,7 +210,8 @@ export function RebaseDialog({ repo, from, focus, preset, unpushed, onClose, don
                 )}
               </div>
               <select value={r.action} onChange={(e) => set(i, { action: e.target.value as RebaseAction, message: e.target.value === 'reword' && !r.message ? r.c.subject : r.message })}>
-                {ACTIONS.map((a) => <option key={a.id} value={a.id} title={a.title}>{a.label}</option>)}
+                {/* The bottom (oldest) commit has nothing below it to squash into. */}
+                {ACTIONS.filter((a) => i < rows.length - 1 || (a.id !== 'squash' && a.id !== 'fixup')).map((a) => <option key={a.id} value={a.id} title={a.title}>{a.label}</option>)}
               </select>
             </div>
           ))}

@@ -348,7 +348,6 @@ option { background: var(--panel-2); color: var(--text); }
 .ref.local { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
 .ref.remote { color: var(--purple-text); border-color: color-mix(in srgb, var(--purple) 50%, transparent); background: color-mix(in srgb, var(--purple) 10%, transparent); }
 .ref.tagref { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); }
-.unpushed { margin-left: 8px; font-size: 11px; color: var(--warn); border: 1px dashed color-mix(in srgb, var(--warn) 60%, transparent); border-radius: 10px; padding: 0 6px; }
 .load-more { margin: 10px auto; display: block; }
 
 /* commit detail */

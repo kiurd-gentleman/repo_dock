@@ -103,6 +103,22 @@ export interface Branch {
   current: boolean
   date: number
   track: string
+  /** Subject of the newest commit. */
+  subject: string
+  /** Compared with the current branch: commits it has that HEAD lacks, and the reverse. Absent on old git. */
+  vsHead?: { ahead: number; behind: number }
+}
+
+export interface MergePreview {
+  /** Commits that would come in (newest first, at most 30). */
+  incoming: Commit[]
+  incomingCount: number
+  /** Commits the current branch has that the other one doesn't. */
+  outgoingCount: number
+  /** The current branch has nothing of its own: merging just moves it forward. */
+  fastForward: boolean
+  /** Files that would conflict; null when git is too old to tell in advance. */
+  conflicts: string[] | null
 }
 
 /** A multi-step git operation that stopped half-way (usually on a conflict). */
@@ -152,6 +168,9 @@ export interface RepoIdentity {
 export interface Stash {
   ref: string
   message: string
+  date: number
+  /** Changed files in the stash (tracked and untracked). */
+  files: string[]
 }
 
 /** App colour theme; 'system' follows the OS light/dark setting. */

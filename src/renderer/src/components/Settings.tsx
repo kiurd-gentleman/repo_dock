@@ -130,7 +130,7 @@ function DataSection() {
               : 'No backups yet'}
           </div>
         </div>
-        <button onClick={() => api.openPath(info.backupsDir)} disabled={!info.backups.length}>Open backups</button>
+        {info.backups.length > 0 && <button onClick={() => api.openPath(info.backupsDir)}>Open backups</button>}
         <button className="primary" onClick={() => act(() => api.backupNow(), 'Backup saved').then(reload)}>Back up now</button>
       </div>
       <p className="hint">A backup is also made automatically every time RepoDock starts. To restore one, close RepoDock and copy it over <code>repodock.json</code> in the data folder.</p>

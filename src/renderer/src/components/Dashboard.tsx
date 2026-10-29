@@ -6,7 +6,7 @@ import { GroupModal } from './Sidebar'
 import { useMenu, type MenuEntry } from './menu'
 
 /** What a repo needs from you, most urgent first. A repo shows up under every state that applies. */
-type State = 'problem' | 'changes' | 'pull' | 'push' | 'clean'
+export type State = 'problem' | 'changes' | 'pull' | 'push' | 'clean'
 
 const STATES: { id: State; label: string; hint: string }[] = [
   { id: 'problem', label: 'Problems', hint: 'Errors, conflicts, a missing folder, or no account to sign in with' },
@@ -18,7 +18,7 @@ const STATES: { id: State; label: string; hint: string }[] = [
 
 const changeCount = (s: RepoSummary) => s.staged + s.unstaged + s.untracked + s.conflicted
 
-function statesOf(s: RepoSummary | undefined): State[] {
+export function statesOf(s: RepoSummary | undefined): State[] {
   if (!s) return []
   const out: State[] = []
   if (s.error || !s.exists || s.conflicted > 0 || (s.owner && !s.effectiveAccountId)) out.push('problem')
@@ -139,9 +139,9 @@ export function Dashboard({ open }: { open: (id: string) => void }) {
     { heading: r.name },
     { label: 'Open', onClick: () => open(r.id) },
     'sep',
-    { label: 'Fetch', onClick: () => runBulk([r.id], 'fetch') },
-    { label: s?.behind ? `Pull ${s.behind} commit${s.behind === 1 ? '' : 's'}` : 'Pull', onClick: () => one(r, 'pull') },
-    { label: s?.ahead ? `Push ${s.ahead} commit${s.ahead === 1 ? '' : 's'}` : 'Push', onClick: () => one(r, 'push') },
+    s?.remoteUrl && { label: 'Fetch', onClick: () => runBulk([r.id], 'fetch') },
+    s?.upstream && { label: s.behind ? `Pull ${s.behind} commit${s.behind === 1 ? '' : 's'}` : 'Pull', onClick: () => one(r, 'pull') },
+    s?.remoteUrl && s.branch && (s.ahead > 0 || !s.upstream) && { label: s.upstream ? `Push ${s.ahead} commit${s.ahead === 1 ? '' : 's'}` : 'Publish branch', onClick: () => one(r, 'push') },
     'sep',
     { heading: 'Move to group' },
     ...state.groups.filter((g) => g.id !== r.groupId).map((g): MenuEntry => ({ label: <><span className="dot" style={{ background: g.color }} /> {g.name}</>, onClick: () => moveTo([r.id], g) })),
@@ -202,12 +202,11 @@ export function Dashboard({ open }: { open: (id: string) => void }) {
             })}
           </div>
           <div className="ov-chips" role="group" aria-label="Show only">
-            {STATES.map((x) => (
+            {STATES.filter((x) => counts[x.id] > 0 || stateFilter === x.id).map((x) => (
               <button
                 key={x.id}
                 className={`ov-chip s-${x.id} ${stateFilter === x.id ? 'on' : ''}`}
                 aria-pressed={stateFilter === x.id}
-                disabled={!counts[x.id] && stateFilter !== x.id}
                 title={x.hint}
                 onClick={() => setStateFilter(stateFilter === x.id ? null : x.id)}
               >

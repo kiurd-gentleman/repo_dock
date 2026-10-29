@@ -104,7 +104,7 @@ export function Agents() {
               {c.connected ? (
                 <button className="small" onClick={() => setClient(c, false)}>{c.detected ? 'Disconnect' : 'Remove'}</button>
               ) : (
-                <button className="small primary" disabled={!!c.error || !c.detected} title={c.detected ? undefined : `Install ${c.name} first`} onClick={() => setClient(c, true)}>Connect</button>
+                c.detected && !c.error && <button className="small primary" onClick={() => setClient(c, true)}>Connect</button>
               )}
             </div>
           ))}
@@ -160,7 +160,7 @@ export function Agents() {
               <button key={f} className={logFilter === f ? 'active' : ''} onClick={() => setLogFilter(f)}>{f === 'all' ? 'All' : f === 'error' ? 'Failed' : 'Denied'}</button>
             ))}
           </div>
-          <button className="small" disabled={!log.length} onClick={async () => (await api.agentClearLog(), setLog([]))}>Clear</button>
+          {log.length > 0 && <button className="small" onClick={async () => (await api.agentClearLog(), setLog([]))}>Clear</button>}
         </div>
         <div className="ag-log">
           {shownLog.map((e) => (
@@ -190,8 +190,8 @@ export function Agents() {
         </p>
         <div className="row" style={{ marginBottom: 8 }}>
           <input className="grow" placeholder="Filter repos…" value={repoQuery} onChange={(e) => setRepoQuery(e.target.value)} />
-          <button onClick={() => setLinked(state.repos.filter((r) => !r.gitLinked).map((r) => r.id), true)} disabled={linked === state.repos.length}>Enable for all</button>
-          <button onClick={() => setLinked(state.repos.filter((r) => r.gitLinked).map((r) => r.id), false)} disabled={!linked}>Disable all</button>
+          {linked < state.repos.length && <button onClick={() => setLinked(state.repos.filter((r) => !r.gitLinked).map((r) => r.id), true)}>Enable for all</button>}
+          {linked > 0 && <button onClick={() => setLinked(state.repos.filter((r) => r.gitLinked).map((r) => r.id), false)}>Disable all</button>}
         </div>
         <div className="ag-repos">
           {repos.map((r) => {

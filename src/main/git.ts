@@ -1,7 +1,7 @@
 import { spawn, execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Account, Branch, Commit, CommitDetail, FileChange, Stash, StatusResult } from '../shared/types'
+import type { Account, Branch, Commit, CommitDetail, FileChange, MergePreview, Stash, StatusResult } from '../shared/types'
 import { getToken, knownHostsFile } from './store'
 
 export interface RunOptions {
@@ -194,10 +194,12 @@ function parseCommit(rec: string): Commit {
   return { sha, shortSha, author, email, date: Number(date) * 1000, refs, subject, parents: parents ? parents.split(' ') : [] }
 }
 
-export async function log(cwd: string, opts: { skip?: number; limit?: number; all?: boolean; search?: string }): Promise<Commit[]> {
+export async function log(cwd: string, opts: { skip?: number; limit?: number; all?: boolean; search?: string; firstParent?: boolean }): Promise<Commit[]> {
   // Topological order keeps a branch's commits together, which makes the graph readable.
   const args = ['log', '--topo-order', `--format=${LOG_FMT}`, `-n${opts.limit ?? 100}`, `--skip=${opts.skip ?? 0}`]
   if (opts.all) args.push('--all')
+  // Only this branch's own line: a merged-in branch shows up as its single merge commit.
+  else if (opts.firstParent) args.push('--first-parent')
   if (opts.search) args.push('-i', `--grep=${opts.search}`)
   try {
     const raw = await run(args, { cwd })
@@ -248,22 +250,70 @@ export async function unpushed(cwd: string): Promise<string[]> {
 }
 
 export async function branches(cwd: string): Promise<Branch[]> {
-  const fmt = ['%(refname)', '%(refname:short)', '%(upstream:short)', '%(objectname:short)', '%(HEAD)', '%(committerdate:unix)', '%(upstream:track)'].join('%1f')
-  const raw = await run(['for-each-ref', `--format=${fmt}`, 'refs/heads', 'refs/remotes'], { cwd })
+  const base = ['%(refname)', '%(refname:short)', '%(upstream:short)', '%(objectname:short)', '%(HEAD)', '%(committerdate:unix)', '%(upstream:track)', '%(contents:subject)']
+  const list = (extra: string[]) => run(['for-each-ref', `--format=${[...base, ...extra].join('%1f')}`, 'refs/heads', 'refs/remotes'], { cwd })
+  // %(ahead-behind:HEAD) needs git 2.41+; without it the comparison with the current branch is just left out.
+  const hasHead = !!(await run(['rev-parse', '-q', '--verify', 'HEAD'], { cwd, okCodes: [1] }).catch(() => '')).trim()
+  let raw: string
+  let compared = hasHead
+  try {
+    raw = await list(hasHead ? ['%(ahead-behind:HEAD)'] : [])
+  } catch {
+    compared = false
+    raw = await list([])
+  }
   return raw
     .split('\n')
     .filter(Boolean)
     .map((l) => {
-      const [ref, name, upstream, sha, head, date, track] = l.split('\x1f')
-      return { name, remote: ref.startsWith('refs/remotes/'), upstream, sha, current: head === '*', date: Number(date) * 1000, track }
+      const [ref, name, upstream, sha, head, date, track, subject, ab] = l.split('\x1f')
+      const b: Branch = { name, remote: ref.startsWith('refs/remotes/'), upstream, sha, current: head === '*', date: Number(date) * 1000, track, subject }
+      if (compared && ab) {
+        const [ahead, behind] = ab.split(' ').map(Number)
+        b.vsHead = { ahead, behind }
+      }
+      return b
     })
     .filter((b) => !b.name.endsWith('/HEAD') && b.name !== 'origin')
 }
 
+/** What merging `other` into the current branch would do, without touching the working tree. */
+export async function mergePreview(cwd: string, other: string): Promise<MergePreview> {
+  const [counts, incomingRaw, mergeBase, head] = await Promise.all([
+    run(['rev-list', '--left-right', '--count', `HEAD...${other}`], { cwd }),
+    run(['log', `--format=${LOG_FMT}`, '-n30', `HEAD..${other}`], { cwd }),
+    run(['merge-base', 'HEAD', other], { cwd }).catch(() => ''),
+    run(['rev-parse', 'HEAD'], { cwd })
+  ])
+  const [outgoingCount, incomingCount] = counts.trim().split(/\s+/).map(Number)
+  let conflicts: string[] | null = null
+  try {
+    // Exit 1 = conflicts. Output: the tree id, then one conflicted path per line.
+    const out = await run(['merge-tree', '--write-tree', '--name-only', '--no-messages', 'HEAD', other], { cwd, okCodes: [1] })
+    conflicts = [...new Set(out.split('\n').slice(1).map((s) => s.trim()).filter(Boolean))]
+  } catch {
+    conflicts = null // git older than 2.40
+  }
+  return {
+    incoming: incomingRaw.split('\x1e').map((r) => r.trim()).filter(Boolean).map(parseCommit),
+    incomingCount,
+    outgoingCount,
+    fastForward: mergeBase.trim() === head.trim(),
+    conflicts
+  }
+}
+
 export async function stashes(cwd: string): Promise<Stash[]> {
-  const raw = await run(['stash', 'list', '--format=%gd%x1f%s'], { cwd })
-  return raw.split('\n').filter(Boolean).map((l) => {
-    const [ref, message] = l.split('\x1f')
-    return { ref, message }
+  const raw = await run(['stash', 'list', '--format=%gd%x1f%s%x1f%ct'], { cwd })
+  const list = raw.split('\n').filter(Boolean).map((l) => {
+    const [ref, message, date] = l.split('\x1f')
+    return { ref, message, date: Number(date) * 1000, files: [] as string[] }
   })
+  await Promise.all(list.slice(0, 30).map(async (s) => {
+    const names = await run(['stash', 'show', '--include-untracked', '--name-only', s.ref], { cwd }).catch(() =>
+      run(['stash', 'show', '--name-only', s.ref], { cwd }).catch(() => '')
+    )
+    s.files = names.split('\n').map((x) => x.trim()).filter(Boolean)
+  }))
+  return list
 }

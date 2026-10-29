@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import type { FileChange, Repo } from '../../../shared/types'
+import type { FileChange, Repo, Stash } from '../../../shared/types'
 import { api } from '../api'
-import { Diff, Spinner, useApp, useLoad } from './ui'
+import { Diff, Spinner, ago, fullDate, useApp, useLoad } from './ui'
+import { FormDialog } from './GitDialogs'
 import { useMenu, type MenuEntry, type MenuItem } from './menu'
 
 const LABEL: Record<string, string> = { M: 'modified', A: 'added', D: 'deleted', R: 'renamed', C: 'copied', T: 'type changed', U: 'conflict', '?': 'untracked' }
@@ -14,9 +15,16 @@ interface Props {
 }
 
 export function Changes({ repo, version, changed, net }: Props) {
-  const { act, busy } = useApp()
+  const { act, busy, summaries } = useApp()
   const { data: st, loading } = useLoad(() => api.status(repo.id), [repo.id, version])
   const [sel, setSel] = useState<{ path: string; staged: boolean } | null>(null)
+  // Stashes live here, next to the changes they were set aside from. Selecting one shows it in the diff pane.
+  const { data: stashes } = useLoad(() => api.stashes(repo.id).catch(() => [] as Stash[]), [repo.id, version])
+  const [stashSel, setStashSel] = useState<string | null>(null)
+  const [stashOpen, setStashOpen] = useState(true)
+  const [dialog, setDialog] = useState<React.ReactNode>(null)
+  const selStash = stashes?.find((x) => x.ref === stashSel) ?? null
+  const { data: stashDiff, loading: stashLoading } = useLoad(async () => (stashSel ? api.stashShow(repo.id, stashSel) : ''), [repo.id, stashSel, version])
   const [msg, setMsg] = useState('')
   const [amend, setAmend] = useState(false)
   const [openMenu, menu] = useMenu()
@@ -89,31 +97,35 @@ export function Changes({ repo, version, changed, net }: Props) {
       f.untracked && ext && { label: `Ignore all ${ext} files`, onClick: () => ignore(`*${ext}`) },
       f.untracked && dir && { label: `Ignore folder ${dir}`, onClick: () => ignore(dir) },
       'sep',
-      { label: 'Open file', onClick: () => api.openPath(full(f.path)) },
-      { label: 'Show in folder', onClick: () => api.showInFolder(full(f.path)) },
+      !gone(f, isStaged) && { label: 'Open file', onClick: () => api.openPath(full(f.path)) },
+      !gone(f, isStaged) && { label: 'Show in folder', onClick: () => api.showInFolder(full(f.path)) },
       { label: 'Copy path', onClick: () => navigator.clipboard.writeText(f.path) },
       { label: 'Copy full path', onClick: () => navigator.clipboard.writeText(full(f.path)) }
     ]
   }
 
+  /** Deleted files can't be opened or shown in Explorer. */
+  const gone = (f: FileChange, isStaged: boolean) => (isStaged ? f.index : f.worktree) === 'D'
   const conflicted = files.filter((f) => f.conflicted)
+  const trackedChanges = files.some((f) => !f.untracked)
+  const anyUntracked = files.some((f) => f.untracked)
   const moreMenu = (e: React.MouseEvent) => openMenu(e, [
     conflicted.length > 0 && { label: `Use ours for all ${conflicted.length} conflicts`, onClick: () => resolve(conflicted.map((f) => f.path), 'ours') },
     conflicted.length > 0 && { label: `Use theirs for all ${conflicted.length} conflicts`, onClick: () => resolve(conflicted.map((f) => f.path), 'theirs') },
     'sep',
-    { label: 'Stash all changes', onClick: () => run(() => api.stashSave(repo.id, ''), 'Changes stashed') },
-    { label: 'Undo last commit', hint: 'keeps changes', onClick: () => confirm('Undo the last commit? Its changes come back as staged.') && run(() => api.undoLastCommit(repo.id), 'Commit undone') },
+    files.length > 0 && { label: 'Stash all changes', onClick: () => run(() => api.stashSave(repo.id, ''), 'Changes stashed') },
+    !!summaries[repo.id]?.lastCommit && { label: 'Undo last commit', hint: 'keeps changes', onClick: () => confirm('Undo the last commit? Its changes come back as staged.') && run(() => api.undoLastCommit(repo.id), 'Commit undone') },
     'sep',
-    { label: 'Remove untracked files…', danger: true, onClick: () => confirm('Delete every untracked file and folder (not ignored ones)? This cannot be undone.') && run(() => api.cleanUntracked(repo.id, false), 'Untracked files removed') },
+    anyUntracked && { label: 'Remove untracked files…', danger: true, onClick: () => confirm('Delete every untracked file and folder (not ignored ones)? This cannot be undone.') && run(() => api.cleanUntracked(repo.id, false), 'Untracked files removed') },
     { label: 'Remove untracked + ignored files…', danger: true, title: 'Also deletes build output, node_modules, .env files…', onClick: () => confirm('Delete every untracked AND ignored file (build output, node_modules, .env…)? This cannot be undone.') && run(() => api.cleanUntracked(repo.id, true), 'Cleaned') },
-    { label: 'Discard ALL changes…', danger: true, onClick: () => confirm('Throw away every staged and unstaged change to tracked files? Untracked files stay. This cannot be undone.') && run(() => api.discardAll(repo.id), 'All changes discarded') }
+    trackedChanges && { label: 'Discard ALL changes…', danger: true, onClick: () => confirm('Throw away every staged and unstaged change to tracked files? Untracked files stay. This cannot be undone.') && run(() => api.discardAll(repo.id), 'All changes discarded') }
   ])
 
   const row = (f: FileChange, isStaged: boolean) => {
     const code = f.conflicted ? 'U' : isStaged ? f.index : f.untracked ? '?' : f.worktree
     const active = sel?.path === f.path && sel.staged === isStaged
     return (
-      <div key={(isStaged ? 's:' : 'u:') + f.path} className={`file ${active ? 'active' : ''}`} onClick={() => setSel({ path: f.path, staged: isStaged })} onContextMenu={(e) => openMenu(e, fileMenu(f, isStaged))}>
+      <div key={(isStaged ? 's:' : 'u:') + f.path} className={`file ${active ? 'active' : ''}`} onClick={() => (setStashSel(null), setSel({ path: f.path, staged: isStaged }))} onContextMenu={(e) => openMenu(e, fileMenu(f, isStaged))}>
         <span className={`code c-${code}`} title={LABEL[code] ?? code}>{code}</span>
         <span className="path" title={f.origPath ? `${f.origPath} → ${f.path}` : f.path}>{f.path}</span>
         <span className="file-actions">
@@ -158,6 +170,27 @@ export function Changes({ repo, version, changed, net }: Props) {
           {loading && <Spinner />}
           {!loading && files.length === 0 && <div className="empty small">Working tree clean ✓</div>}
         </div>
+        <div className="file-section stash-section">
+          <div className="section-head">
+            <button className="link stash-toggle" onClick={() => setStashOpen(!stashOpen)} aria-expanded={stashOpen}>
+              {stashOpen ? '▾' : '▸'} Stashed ({stashes?.length ?? 0})
+            </button>
+            {files.length > 0 && <button className="link" title="Set every change aside (including new files) and get a clean working tree" onClick={() => setDialog(
+              <FormDialog title="Stash changes" submit="Stash" onClose={() => setDialog(null)}
+                intro="Your changes are set aside and the working tree becomes clean. Bring them back any time from Stashed."
+                fields={[{ key: 'msg', label: 'What are these changes?', optional: true, placeholder: 'e.g. half-done login form' }]}
+                onSubmit={(v) => run(() => api.stashSave(repo.id, v.msg.trim()), 'Changes stashed').then(() => true)} />
+            )}>Stash changes</button>}
+          </div>
+          {stashOpen && (stashes ?? []).map((x) => (
+            <div key={x.ref} className={`file stash-item ${stashSel === x.ref ? 'active' : ''}`} onClick={() => (setSel(null), setStashSel(x.ref))} title={`${x.message}\n${fullDate(x.date)}`}>
+              <span className="code c-S">S</span>
+              <span className="path">{x.message.replace(/^(WIP on|On) [^:]+: /, '')}</span>
+              <span className="stash-meta">{x.files.length} file{x.files.length === 1 ? '' : 's'} · {ago(x.date)}</span>
+            </div>
+          ))}
+          {stashOpen && !stashes?.length && <div className="empty small">Nothing stashed. Use “Stash changes” to set work aside without committing.</div>}
+        </div>
         <div className="commit-box">
           <textarea
             placeholder={amend ? 'New message (leave empty to keep the old one)' : 'Commit message'}
@@ -171,19 +204,39 @@ export function Changes({ repo, version, changed, net }: Props) {
             <button className="primary grow" disabled={busy || (!msg.trim() && !amend) || files.length === 0 && !amend} onClick={() => commit(false)}>
               Commit {staged.length ? `${staged.length} file(s)` : 'all'}
             </button>
-            <button disabled={busy || (!msg.trim() && !amend)} onClick={() => commit(true)}>Commit & Push</button>
+            {summaries[repo.id]?.remoteUrl && <button disabled={busy || (!msg.trim() && !amend)} onClick={() => commit(true)}>Commit & Push</button>}
           </div>
           <div className="hint">Ctrl+Enter to commit</div>
         </div>
       </div>
       <div className="split-right">
-        {selFile ? (
+        {selStash ? (
+          <>
+            <div className="diff-head stash-head">
+              <div className="grow">
+                <b>{selStash.message.replace(/^(WIP on|On) [^:]+: /, '')}</b>
+                <div className="sub">{selStash.ref} · {selStash.files.length} file{selStash.files.length === 1 ? '' : 's'} · stashed {ago(selStash.date)}</div>
+              </div>
+              <button className="primary" disabled={busy} onClick={() => run(() => api.stashPop(repo.id, selStash.ref), 'Stash restored').then(() => setStashSel(null))} title="Put the changes back and remove the stash">Restore</button>
+              <button disabled={busy} onClick={() => run(() => api.stashApply(repo.id, selStash.ref), 'Stash applied')} title="Put the changes back and keep the stash">Apply, keep stash</button>
+              <button disabled={busy} onClick={() => setDialog(
+                <FormDialog title={`Branch from ${selStash.ref}`} submit="Create branch" onClose={() => setDialog(null)}
+                  intro="Creates a branch where the stash was made, restores the changes there and removes the stash."
+                  fields={[{ key: 'name', label: 'Branch name' }]}
+                  onSubmit={(v) => run(() => api.stashBranch(repo.id, selStash.ref, v.name.trim()), `Created ${v.name.trim()}`).then(() => (setStashSel(null), true))} />
+              )}>New branch…</button>
+              <button className="danger" disabled={busy} onClick={() => confirm(`Delete this stash? Its changes are lost.`) && run(() => api.stashDrop(repo.id, selStash.ref), 'Stash deleted').then(() => setStashSel(null))}>Delete</button>
+            </div>
+            {stashLoading ? <Spinner /> : <Diff text={stashDiff ?? ''} />}
+          </>
+        ) : selFile ? (
           <>
             <div className="diff-head">{selFile.path} <span className="muted">({sel!.staged ? 'staged' : 'working tree'})</span></div>
             {diffLoading ? <Spinner /> : <Diff text={diff ?? ''} />}
           </>
         ) : <div className="empty">Select a file to see its diff</div>}
       </div>
+      {dialog}
     </div>
   )
 }

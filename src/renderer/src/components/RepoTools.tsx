@@ -16,6 +16,7 @@ export function RepoTools({ repo, version, changed }: { repo: Repo; version: num
   const close = () => setDialog(null)
   const s = summaries[repo.id]
   const ghUrl = s?.owner ? `https://github.com/${s.owner}/${s.repoName}` : null
+  const hasRemote = !!remotes?.length
   const origin = remotes?.find((r) => r.name === 'origin')?.name ?? remotes?.[0]?.name ?? 'origin'
 
   const run = async (fn: () => Promise<unknown>, ok: string) => {
@@ -37,7 +38,7 @@ export function RepoTools({ repo, version, changed }: { repo: Repo; version: num
   )
 
   const tagMenu = (t: Tag, e: React.MouseEvent) => openMenu(e, [
-    { label: `Push ${t.name} to ${origin}`, onClick: () => run(() => api.pushTag(repo.id, t.name, origin), `Pushed ${t.name}`) },
+    hasRemote && { label: `Push ${t.name} to ${origin}`, onClick: () => run(() => api.pushTag(repo.id, t.name, origin), `Pushed ${t.name}`) },
     { label: 'Check out tag', hint: 'detached', onClick: () => run(() => api.checkoutCommit(repo.id, t.sha), `Checked out ${t.name}`) },
     { label: 'Create branch from tag…', onClick: () => setDialog(
       <FormDialog title={`Branch from ${t.name}`} submit="Create & switch" onClose={close} fields={[{ key: 'name', label: 'Branch name', placeholder: `from-${t.name}` }]}
@@ -48,7 +49,7 @@ export function RepoTools({ repo, version, changed }: { repo: Repo; version: num
     ghUrl && { label: 'View release / tag on GitHub', onClick: () => api.openExternal(`${ghUrl}/releases/tag/${encodeURIComponent(t.name)}`) },
     'sep',
     { label: 'Delete local tag', danger: true, onClick: () => confirm(`Delete local tag ${t.name}?`) && run(() => api.deleteTag(repo.id, t.name), `Deleted ${t.name}`) },
-    { label: `Delete tag on ${origin}`, danger: true, onClick: () => confirm(`Delete ${t.name} on ${origin}? Others won't see it any more.`) && run(() => api.deleteRemoteTag(repo.id, t.name, origin), `Deleted ${t.name} on ${origin}`) }
+    hasRemote && { label: `Delete tag on ${origin}`, danger: true, onClick: () => confirm(`Delete ${t.name} on ${origin}? Others won't see it any more.`) && run(() => api.deleteRemoteTag(repo.id, t.name, origin), `Deleted ${t.name} on ${origin}`) }
   ])
 
   const remoteDialog = (r?: Remote) => setDialog(
@@ -76,8 +77,8 @@ export function RepoTools({ repo, version, changed }: { repo: Repo; version: num
         </header>
         <div className="br-new">
           <button className="primary" disabled={busy} onClick={newTag}>+ New tag on HEAD</button>
-          <button disabled={busy || !tags?.length || !remotes?.length} onClick={() => run(() => api.pushAllTags(repo.id, origin), 'All tags pushed')}>↑ Push all tags</button>
-          <button disabled={busy || !remotes?.length} onClick={() => run(() => api.fetchRemote(repo.id, origin), 'Fetched tags')}>⇣ Fetch tags</button>
+          {hasRemote && !!tags?.length && <button disabled={busy} onClick={() => run(() => api.pushAllTags(repo.id, origin), 'All tags pushed')}>↑ Push all tags</button>}
+          {hasRemote && <button disabled={busy} onClick={() => run(() => api.fetchRemote(repo.id, origin), 'Fetched tags')}>⇣ Fetch tags</button>}
         </div>
         <div className="br-list">
           {shownTags.map((t) => (
@@ -90,7 +91,7 @@ export function RepoTools({ repo, version, changed }: { repo: Repo; version: num
                 <div className="br-meta"><code>{t.sha.slice(0, 7)}</code><span>{ago(t.date)}</span>{t.message && <span className="ellipsis" title={t.message}>{t.message}</span>}</div>
               </div>
               <div className="br-actions">
-                <button disabled={busy} onClick={() => run(() => api.pushTag(repo.id, t.name, origin), `Pushed ${t.name}`)}>Push</button>
+                {hasRemote && <button disabled={busy} onClick={() => run(() => api.pushTag(repo.id, t.name, origin), `Pushed ${t.name}`)}>Push</button>}
                 <button onClick={(e) => tagMenu(t, e)} title="More">⋯</button>
               </div>
             </div>
@@ -144,7 +145,7 @@ function Identity({ repo }: { repo: Repo }) {
         <label>Name<input value={v.name} placeholder={data?.globalName || 'Your Name'} onChange={(e) => setV({ ...v, name: e.target.value })} /></label>
         <label>Email<input value={v.email} placeholder={data?.globalEmail || 'you@example.com'} onChange={(e) => setV({ ...v, email: e.target.value })} /></label>
         <div className="row end">
-          <button className="primary" disabled={!dirty} onClick={() => act(() => api.setIdentity(repo.id, v.name, v.email), 'Identity saved').then(reload)}>Save</button>
+          {dirty && <button className="primary" onClick={() => act(() => api.setIdentity(repo.id, v.name, v.email), 'Identity saved').then(reload)}>Save</button>}
         </div>
       </div>
     </section>

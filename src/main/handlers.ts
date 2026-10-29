@@ -378,13 +378,14 @@ export const handlers = {
 
   status: async (id: string) => git.status(repo(id).path),
   diff: async (id: string, file: string, staged: boolean, untracked: boolean) => git.fileDiff(repo(id).path, file, staged, untracked),
-  log: async (id: string, opts: { skip?: number; limit?: number; all?: boolean; search?: string }) => git.log(repo(id).path, opts),
+  log: async (id: string, opts: { skip?: number; limit?: number; all?: boolean; search?: string; firstParent?: boolean }) => git.log(repo(id).path, opts),
   showCommit: async (id: string, sha: string) => {
     if (!/^[0-9a-f]{4,40}$/i.test(sha)) throw new Error('Invalid commit id')
     return git.showCommit(repo(id).path, sha)
   },
   unpushed: async (id: string) => git.unpushed(repo(id).path),
   branches: async (id: string) => git.branches(repo(id).path),
+  mergePreview: async (id: string, other: string) => git.mergePreview(repo(id).path, safeRef(other)),
   stashes: async (id: string) => git.stashes(repo(id).path),
 
   stage: (id: string, files: string[]) => gitOn(id, ['add', '-A', '--', ...files]),
