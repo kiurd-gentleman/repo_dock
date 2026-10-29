@@ -31,6 +31,16 @@ function createWindow(): void {
     }
   })
   if (maximized) win.maximize()
+  // Tell the Windows taskbar exactly which icon this window's button uses. Without it Windows may
+  // reuse an icon it cached for the same app id (e.g. Electron's atom from a development run).
+  if (process.platform === 'win32') {
+    win.setAppDetails({
+      appId: app.isPackaged ? 'com.repodock.app' : 'com.repodock.app.dev',
+      appIconPath: app.isPackaged ? process.execPath : path.join(__dirname, '../../build/icon.ico'),
+      appIconIndex: 0,
+      relaunchDisplayName: 'RepoDock'
+    })
+  }
   trackWindow(win)
   // Links inside the UI open in the real browser, never inside the app.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -58,7 +68,10 @@ app.on('second-instance', () => {
 if (process.platform === 'darwin') process.env.PATH = [process.env.PATH, '/opt/homebrew/bin', '/usr/local/bin', '/opt/local/bin'].filter(Boolean).join(':')
 
 // Needed on Windows for notifications (AI approval requests) to show the app's name.
-app.setAppUserModelId('com.repodock.app')
+// The installed app's Start-menu shortcut carries this id, so the taskbar shows the RepoDock logo.
+// Development runs inside electron.exe; giving them their own id stops Windows from caching
+// Electron's atom icon for the installed app's taskbar button.
+app.setAppUserModelId(app.isPackaged ? 'com.repodock.app' : 'com.repodock.app.dev')
 
 app.whenReady().then(() => {
   backupData()
